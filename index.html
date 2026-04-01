@@ -548,9 +548,12 @@ function toggleLogItem(idx){
 function editExercise(idx){
   editIdx = idx;
   const ex = W.exercises[idx];
-  document.getElementById('editTitle').textContent = 'Edit: '+ex.name;
+  document.getElementById('editTitle').textContent = 'Edit Exercise';
   const container = document.getElementById('editSets');
-  container.innerHTML='';
+  container.innerHTML=`<div class="edit-set-row" style="border-bottom:2px solid var(--border);padding-bottom:12px;margin-bottom:4px">
+    <span style="width:auto;color:var(--dim);font-size:12px">Name</span>
+    <input type="text" id="eNameInput" value="${ex.name}" style="width:100%;flex:1;text-align:left;font-size:15px;padding:0 10px">
+  </div>`;
   ex.allSets.forEach((s,i)=>{
     const row = document.createElement('div');
     row.className='edit-set-row';
@@ -567,6 +570,13 @@ function editExercise(idx){
 function saveEdit(){
   if(editIdx<0) return;
   const ex = W.exercises[editIdx];
+  const oldName = ex.name;
+
+  // Update name
+  const newName = document.getElementById('eNameInput').value.trim();
+  if(newName) ex.name = newName;
+
+  // Update sets
   ex.allSets.forEach((s,i)=>{
     const w = parseFloat(document.getElementById('eW'+i).value);
     const r = parseInt(document.getElementById('eR'+i).value);
@@ -576,7 +586,12 @@ function saveEdit(){
   ex.weight = ex.allSets[0].weight;
   ex.desc = ex.weight+' lbs';
 
-  // Update history
+  // Update history (remove old name if renamed)
+  if(oldName.toLowerCase()!==ex.name.toLowerCase()){
+    delete history[oldName.toLowerCase()];
+    recentEx = recentEx.map(e=>e.toLowerCase()===oldName.toLowerCase()?ex.name:e);
+    SS('iron_recent', recentEx);
+  }
   history[ex.name.toLowerCase()]={weight:ex.weight, desc:ex.desc, sets:ex.sets, date:new Date().toISOString().split('T')[0]};
   SS('iron_history', history);
 
