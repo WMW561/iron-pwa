@@ -426,7 +426,11 @@ function showPicker(){
     btn.textContent=name;
     const h=history[name.toLowerCase()];
     if(h) btn.textContent=name+' · '+h.weight;
-    btn.onclick=()=>{if(!document.getElementById('pickerView').classList.contains('edit-mode'))selectExercise(name)};
+    btn.onclick=()=>{
+      const picker=document.getElementById('pickerView');
+      if(picker.classList.contains('edit-mode')) editRecent(name);
+      else selectExercise(name);
+    };
     const del=document.createElement('span');
     del.className='recent-del';
     del.textContent='×';
@@ -622,6 +626,25 @@ function toggleEditRecent(){
 function deleteRecent(name){
   recentEx = recentEx.filter(e=>e.toLowerCase()!==name.toLowerCase());
   SS('iron_recent', recentEx);
+  showPicker();
+}
+
+function editRecent(oldName){
+  const newName = prompt('Rename exercise:', oldName);
+  if(!newName || !newName.trim() || newName.trim()===oldName) return;
+  const cleaned = newName.trim().replace(/\b\w/g,c=>c.toUpperCase());
+
+  // Update recent list
+  recentEx = recentEx.map(e=>e.toLowerCase()===oldName.toLowerCase()?cleaned:e);
+  SS('iron_recent', recentEx);
+
+  // Update history
+  if(history[oldName.toLowerCase()]){
+    history[cleaned.toLowerCase()] = history[oldName.toLowerCase()];
+    delete history[oldName.toLowerCase()];
+    SS('iron_history', history);
+  }
+
   showPicker();
 }
 
