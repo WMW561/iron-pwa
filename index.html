@@ -87,6 +87,32 @@ input{font-family:inherit;outline:none}
 .log-item{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .log-name{font-weight:600}
 .log-sets{color:var(--dim)}
+.log-item{position:relative}
+.log-actions{display:none;gap:8px;margin-top:6px}
+.log-item.expanded .log-actions{display:flex}
+.log-act{padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600}
+.log-act.edit{background:var(--s2);border:1px solid var(--blue);color:var(--blue)}
+.log-act.del{background:var(--s2);border:1px solid var(--red);color:var(--red)}
+
+/* Edit modal */
+.edit-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:95;overflow-y:auto;padding:20px}
+.edit-modal.show{display:flex;align-items:flex-start;justify-content:center}
+.edit-box{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:20px;width:100%;max-width:400px;margin-top:30px}
+.edit-box h3{font-size:16px;font-weight:700;margin-bottom:14px}
+.edit-set-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.edit-set-row span{font-size:12px;color:var(--muted);width:40px}
+.edit-set-row input{width:70px;height:36px;border-radius:8px;background:var(--s2);border:1px solid var(--border);color:var(--text);font-size:15px;font-weight:600;text-align:center}
+.edit-set-row input:focus{border-color:var(--red)}
+.edit-set-row .x-label{font-size:14px;color:var(--muted)}
+.edit-btns{display:flex;gap:8px;margin-top:14px}
+.edit-btns button{flex:1;height:42px;border-radius:10px;font-size:13px;font-weight:700}
+.edit-save{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
+.edit-cancel{background:var(--s2);border:1px solid var(--border);color:var(--dim)}
+
+/* Recent exercise delete */
+.recent-btn{position:relative}
+.recent-del{display:none;position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;font-size:12px;line-height:20px;text-align:center}
+.picker.edit-mode .recent-del{display:block}
 
 /* Bottom Bar */
 .bottom{position:fixed;bottom:0;left:0;right:0;background:var(--bg);border-top:1px solid var(--border);padding:12px 16px calc(12px + var(--safe-b));display:flex;gap:8px}
@@ -132,7 +158,10 @@ input{font-family:inherit;outline:none}
 
 <!-- Exercise picker (shown when no active exercise) -->
 <div id="pickerView" class="picker">
+  <div style="display:flex;justify-content:space-between;align-items:center">
   <div class="picker-title">RECENT EXERCISES</div>
+  <button style="font-size:11px;color:var(--muted);background:none;padding:4px 8px" onclick="toggleEditRecent()" id="editRecentBtn">Edit</button>
+</div>
   <div class="recent-grid" id="recentGrid"></div>
   <div class="picker-title" style="margin-top:8px">ADD EXERCISE</div>
   <div class="add-row">
@@ -167,6 +196,18 @@ input{font-family:inherit;outline:none}
     <h2>WORKOUT COMPLETE</h2>
     <div id="summaryBody"></div>
     <button class="close" onclick="closeSummary()">DONE</button>
+  </div>
+</div>
+
+<!-- Edit exercise modal -->
+<div class="edit-modal" id="editModal">
+  <div class="edit-box">
+    <h3 id="editTitle">Edit Exercise</h3>
+    <div id="editSets"></div>
+    <div class="edit-btns">
+      <button class="edit-cancel" onclick="closeEdit()">Cancel</button>
+      <button class="edit-save" onclick="saveEdit()">Save</button>
+    </div>
   </div>
 </div>
 
@@ -378,13 +419,21 @@ function showPicker(){
   const grid=document.getElementById('recentGrid');
   grid.innerHTML='';
   recentEx.forEach(name=>{
+    const wrap=document.createElement('div');
+    wrap.style.cssText='position:relative;display:inline-block';
     const btn=document.createElement('button');
     btn.className='recent-btn';
     btn.textContent=name;
     const h=history[name.toLowerCase()];
     if(h) btn.textContent=name+' · '+h.weight;
-    btn.onclick=()=>selectExercise(name);
-    grid.appendChild(btn);
+    btn.onclick=()=>{if(!document.getElementById('pickerView').classList.contains('edit-mode'))selectExercise(name)};
+    const del=document.createElement('span');
+    del.className='recent-del';
+    del.textContent='×';
+    del.onclick=(e)=>{e.stopPropagation();deleteRecent(name)};
+    wrap.appendChild(btn);
+    wrap.appendChild(del);
+    grid.appendChild(wrap);
   });
   if(recentEx.length===0){
     grid.innerHTML='<span style="color:var(--muted);font-size:13px">No exercises yet. Add one below.</span>';
@@ -435,9 +484,15 @@ function updateLog(){
   const v=document.getElementById('logView');
   if(W.exercises.length===0){v.innerHTML='';return}
   let html='<h3>Completed</h3>';
-  W.exercises.forEach(ex=>{
+  W.exercises.forEach((ex,idx)=>{
     const sStr=ex.allSets.map(s=>s.weight+'×'+s.reps).join(', ');
-    html+=`<div class="log-item"><span class="log-name">${ex.name}</span><span class="log-sets">${sStr}</span></div>`;
+    html+=`<div class="log-item" onclick="toggleLogItem(${idx})">
+      <div style="display:flex;justify-content:space-between"><span class="log-name">${ex.name}</span><span class="log-sets">${sStr}</span></div>
+      <div class="log-actions">
+        <button class="log-act edit" onclick="event.stopPropagation();editExercise(${idx})">Edit</button>
+        <button class="log-act del" onclick="event.stopPropagation();deleteExercise(${idx})">Delete</button>
+      </div>
+    </div>`;
   });
   v.innerHTML=html;
 }
@@ -476,6 +531,82 @@ function closeSummary(){
   document.getElementById('logView').innerHTML='';
   document.getElementById('timer').textContent='00:00';
   document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="startWorkout()">START WORKOUT</button>`;
+  showPicker();
+}
+
+// ===================== EDIT & DELETE =====================
+let editIdx = -1;
+
+function toggleLogItem(idx){
+  const items = document.querySelectorAll('.log-item');
+  items.forEach((item,i)=>{
+    if(i===idx) item.classList.toggle('expanded');
+    else item.classList.remove('expanded');
+  });
+}
+
+function editExercise(idx){
+  editIdx = idx;
+  const ex = W.exercises[idx];
+  document.getElementById('editTitle').textContent = 'Edit: '+ex.name;
+  const container = document.getElementById('editSets');
+  container.innerHTML='';
+  ex.allSets.forEach((s,i)=>{
+    const row = document.createElement('div');
+    row.className='edit-set-row';
+    row.innerHTML=`
+      <span>Set ${i+1}</span>
+      <input type="number" inputmode="decimal" id="eW${i}" value="${s.weight}">
+      <span class="x-label">×</span>
+      <input type="number" inputmode="numeric" id="eR${i}" value="${s.reps}">`;
+    container.appendChild(row);
+  });
+  document.getElementById('editModal').classList.add('show');
+}
+
+function saveEdit(){
+  if(editIdx<0) return;
+  const ex = W.exercises[editIdx];
+  ex.allSets.forEach((s,i)=>{
+    const w = parseFloat(document.getElementById('eW'+i).value);
+    const r = parseInt(document.getElementById('eR'+i).value);
+    if(w) s.weight=w;
+    if(r) { s.reps=r; ex.sets[i]=r; }
+  });
+  ex.weight = ex.allSets[0].weight;
+  ex.desc = ex.weight+' lbs';
+
+  // Update history
+  history[ex.name.toLowerCase()]={weight:ex.weight, desc:ex.desc, sets:ex.sets, date:new Date().toISOString().split('T')[0]};
+  SS('iron_history', history);
+
+  closeEdit();
+  updateLog();
+  save();
+}
+
+function closeEdit(){
+  editIdx=-1;
+  document.getElementById('editModal').classList.remove('show');
+}
+
+function deleteExercise(idx){
+  if(!confirm('Delete '+W.exercises[idx].name+'?')) return;
+  W.exercises.splice(idx,1);
+  updateLog();
+  save();
+}
+
+function toggleEditRecent(){
+  const picker = document.getElementById('pickerView');
+  picker.classList.toggle('edit-mode');
+  const btn = document.getElementById('editRecentBtn');
+  btn.textContent = picker.classList.contains('edit-mode') ? 'Done' : 'Edit';
+}
+
+function deleteRecent(name){
+  recentEx = recentEx.filter(e=>e.toLowerCase()!==name.toLowerCase());
+  SS('iron_recent', recentEx);
   showPicker();
 }
 
