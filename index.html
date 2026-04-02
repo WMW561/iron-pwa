@@ -151,8 +151,16 @@ input{font-family:inherit;outline:none}
   <div class="rest-label">REST (tap to change)</div>
 </div>
 
+<!-- Workout Plan Selector (shown before starting) -->
+<div id="planView" class="picker">
+  <div class="picker-title">TRAINING PLAN — Upper/Lower 4-Day Split</div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Hit each muscle 2x/week. Keep sessions under 45 min. Choose your equipment at the gym.</div>
+  <div id="planGrid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+  <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600" onclick="skipPlan()">Free Workout (no plan)</button>
+</div>
+
 <!-- Exercise picker (shown when no active exercise) -->
-<div id="pickerView" class="picker">
+<div id="pickerView" class="picker" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center">
   <div class="picker-title">RECENT EXERCISES</div>
   <button style="font-size:11px;color:var(--muted);background:none;padding:4px 8px" onclick="toggleEditRecent()" id="editRecentBtn">Edit</button>
@@ -182,7 +190,7 @@ input{font-family:inherit;outline:none}
 
 <!-- Bottom bar -->
 <div class="bottom" id="bottomBar">
-  <button class="bot-btn start" id="startBtn" onclick="startWorkout()">START WORKOUT</button>
+  <button class="bot-btn start" id="startBtn" onclick="showPlanView()">START WORKOUT</button>
 </div>
 
 <!-- Workout History Panel -->
@@ -229,10 +237,128 @@ let history = LS('iron_history') || {};
 let recentEx = LS('iron_recent') || [];
 let restInterval = null;
 
+// ===================== TRAINING PLAN =====================
+const PLAN = {
+  'Upper A': {
+    focus: 'Chest, Back, Shoulders, Arms',
+    color: '#3b82f6',
+    exercises: [
+      {name:'Chest Press', category:'Chest', sets:3, reps:10, note:'Machine, DB, or barbell — your choice'},
+      {name:'Row', category:'Back', sets:3, reps:10, note:'Cable row, DB row, or machine row'},
+      {name:'Shoulder Press', category:'Shoulders', sets:3, reps:10, note:'Machine, DB, or barbell'},
+      {name:'Bicep Curl', category:'Arms', sets:2, reps:12, note:'DB, cable, or EZ bar'},
+      {name:'Tricep Pushdown', category:'Arms', sets:2, reps:12, note:'Cable or machine'},
+    ]
+  },
+  'Lower A': {
+    focus: 'Quads, Hamstrings, Glutes, Core',
+    color: '#dc2626',
+    exercises: [
+      {name:'Leg Press', category:'Quads', sets:3, reps:10, note:'Last: 270 lbs'},
+      {name:'Seated Leg Extension', category:'Quads', sets:3, reps:10, note:'Last: 80 lbs'},
+      {name:'Seated Leg Curl', category:'Hamstrings', sets:3, reps:10, note:'Last: 80 lbs'},
+      {name:'Bulgarian Squat', category:'Glutes/Quads', sets:3, reps:10, note:'Last: 12 lb DBs'},
+      {name:'Bosu Ball Crunch', category:'Core', sets:2, reps:25, note:'Last: 15 lb DB'},
+    ]
+  },
+  'Upper B': {
+    focus: 'Chest, Back, Shoulders, Arms (variation)',
+    color: '#3b82f6',
+    exercises: [
+      {name:'Incline Press', category:'Upper Chest', sets:3, reps:10, note:'DB or machine — different angle from Upper A'},
+      {name:'Lat Pulldown', category:'Back', sets:3, reps:10, note:'Wide grip or neutral grip'},
+      {name:'Lateral Raise', category:'Shoulders', sets:3, reps:12, note:'DB or cable'},
+      {name:'Hammer Curl', category:'Arms', sets:2, reps:12, note:'DB'},
+      {name:'Overhead Tricep Extension', category:'Arms', sets:2, reps:12, note:'DB, cable, or machine'},
+    ]
+  },
+  'Lower B': {
+    focus: 'Quads, Hamstrings, Glutes, Core (variation)',
+    color: '#dc2626',
+    exercises: [
+      {name:'Squat', category:'Quads/Glutes', sets:3, reps:10, note:'Machine, goblet, or barbell — choose at gym'},
+      {name:'Romanian Deadlift', category:'Hamstrings/Glutes', sets:3, reps:10, note:'DB or barbell'},
+      {name:'Leg Curl', category:'Hamstrings', sets:3, reps:10, note:'Seated or lying — whichever is available'},
+      {name:'Lunge', category:'Quads/Glutes', sets:3, reps:10, note:'Walking, reverse, or stationary'},
+      {name:'Plank', category:'Core', sets:3, reps:0, note:'Hold 30-60 seconds each'},
+    ]
+  }
+};
+
+const WEEK_SCHEDULE = {
+  1:'Upper A', 2:'Lower A', 3:'Off', 4:'Upper B', 5:'Lower B', 0:'Off', 6:'Off'
+};
+// 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+
+let planQueue = []; // exercises loaded from plan
+
+function showPlanView(){
+  document.getElementById('planView').style.display='block';
+  document.getElementById('pickerView').style.display='none';
+  document.getElementById('exCard').style.display='none';
+
+  const grid = document.getElementById('planGrid');
+  grid.innerHTML='';
+
+  const today = new Date().getDay();
+  const suggested = WEEK_SCHEDULE[today];
+
+  Object.entries(PLAN).forEach(([name, plan])=>{
+    const isSuggested = name === suggested;
+    const btn = document.createElement('button');
+    btn.style.cssText=`width:100%;padding:14px 16px;border-radius:14px;background:var(--s1);border:1px solid ${isSuggested?plan.color:'var(--border)'};text-align:left;color:var(--text);display:flex;flex-direction:column;gap:4px`;
+    if(isSuggested) btn.style.boxShadow=`0 0 12px ${plan.color}33`;
+
+    const exList = plan.exercises.map(e=>e.name).join(' · ');
+    btn.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+        <span style="font-size:16px;font-weight:700;color:${plan.color}">${name}</span>
+        ${isSuggested?'<span style="font-size:10px;padding:3px 8px;border-radius:6px;background:'+plan.color+'22;color:'+plan.color+';font-weight:600">TODAY</span>':''}
+      </div>
+      <span style="font-size:12px;color:var(--dim)">${plan.focus}</span>
+      <span style="font-size:11px;color:var(--muted)">${exList}</span>`;
+    btn.onclick=()=>startPlanWorkout(name);
+    grid.appendChild(btn);
+  });
+}
+
+function startPlanWorkout(planName){
+  const plan = PLAN[planName];
+  if(!plan) return;
+
+  startWorkout();
+  planQueue = [...plan.exercises];
+  document.getElementById('planView').style.display='none';
+
+  // Load first exercise from plan
+  loadNextFromPlan();
+}
+
+function loadNextFromPlan(){
+  if(planQueue.length===0){
+    showPicker(); // plan complete, free-add if they want more
+    return;
+  }
+  const next = planQueue.shift();
+  W.targetSets = next.sets;
+
+  // Show picker briefly with plan exercise pre-filled
+  document.getElementById('pickerView').style.display='none';
+  selectExercise(next.name);
+}
+
+function skipPlan(){
+  document.getElementById('planView').style.display='none';
+  showPicker();
+}
+
+// Override finishExercise to auto-load next plan exercise
+const _origFinishExercise = finishExercise;
+
 // Restore active workout
 const saved = LS('iron_active');
 if(saved && saved.active){ W=saved; W.start=new Date(saved.start); restoreUI() }
-else { showPicker() }
+else { showPlanView() }
 
 // ===================== PLATE MATH =====================
 function calcWeight(s){
@@ -397,7 +523,13 @@ function finishExercise(){
   document.getElementById('exCard').style.display='none';
   // Don't clear rest — user may want rest before starting next exercise
   updateLog();
-  showPicker(); // show picker immediately so user can add next exercise while seeing the log below
+
+  // If plan exercises remain, auto-load next one
+  if(planQueue && planQueue.length>0){
+    loadNextFromPlan();
+  } else {
+    showPicker();
+  }
   save();
 }
 
@@ -483,6 +615,7 @@ function toggleType(){
 // ===================== EXERCISE PICKER =====================
 function showPicker(){
   document.getElementById('exCard').style.display='none';
+  document.getElementById('planView').style.display='none';
   const p=document.getElementById('pickerView');
   p.style.display='block';
   // Keep log visible below picker
@@ -667,7 +800,7 @@ function submitWorkout(){
   clearRest();
   if(timerInt)clearInterval(timerInt);
   document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="startWorkout()">START WORKOUT</button>`;
-  showPicker();
+  showPlanView();
 }
 
 function closeSummary(){
