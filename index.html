@@ -151,12 +151,11 @@ input{font-family:inherit;outline:none}
   <div class="rest-label">REST (tap to change)</div>
 </div>
 
-<!-- Workout Plan Selector (shown before starting) -->
+<!-- Workout Focus Selector -->
 <div id="planView" class="picker">
-  <div class="picker-title">TRAINING PLAN — Upper/Lower 4-Day Split</div>
-  <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Hit each muscle 2x/week. Keep sessions under 45 min. Choose your equipment at the gym.</div>
+  <div class="picker-title">WHAT ARE YOU HITTING TODAY?</div>
   <div id="planGrid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
-  <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600" onclick="skipPlan()">Free Workout (no plan)</button>
+  <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600" onclick="skipPlan()">Free Workout</button>
 </div>
 
 <!-- Exercise picker (shown when no active exercise) -->
@@ -238,122 +237,145 @@ let recentEx = LS('iron_recent') || [];
 let restInterval = null;
 
 // ===================== TRAINING PLAN =====================
-const PLAN = {
-  'Upper A': {
-    focus: 'Chest, Back, Shoulders, Arms',
+const MUSCLE_GROUPS = {
+  'Upper': {
     color: '#3b82f6',
-    exercises: [
-      {name:'Chest Press', category:'Chest', sets:3, reps:10, note:'Machine, DB, or barbell — your choice'},
-      {name:'Row', category:'Back', sets:3, reps:10, note:'Cable row, DB row, or machine row'},
-      {name:'Shoulder Press', category:'Shoulders', sets:3, reps:10, note:'Machine, DB, or barbell'},
-      {name:'Bicep Curl', category:'Arms', sets:2, reps:12, note:'DB, cable, or EZ bar'},
-      {name:'Tricep Pushdown', category:'Arms', sets:2, reps:12, note:'Cable or machine'},
-    ]
+    groups: ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Core']
   },
-  'Lower A': {
-    focus: 'Quads, Hamstrings, Glutes, Core',
+  'Lower': {
     color: '#dc2626',
-    exercises: [
-      {name:'Leg Press', category:'Quads', sets:3, reps:10, note:'Last: 270 lbs'},
-      {name:'Seated Leg Extension', category:'Quads', sets:3, reps:10, note:'Last: 80 lbs'},
-      {name:'Seated Leg Curl', category:'Hamstrings', sets:3, reps:10, note:'Last: 80 lbs'},
-      {name:'Bulgarian Squat', category:'Glutes/Quads', sets:3, reps:10, note:'Last: 12 lb DBs'},
-      {name:'Bosu Ball Crunch', category:'Core', sets:2, reps:25, note:'Last: 15 lb DB'},
-    ]
+    groups: ['Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core']
   },
-  'Upper B': {
-    focus: 'Chest, Back, Shoulders, Arms (variation)',
-    color: '#3b82f6',
-    exercises: [
-      {name:'Incline Press', category:'Upper Chest', sets:3, reps:10, note:'DB or machine — different angle from Upper A'},
-      {name:'Lat Pulldown', category:'Back', sets:3, reps:10, note:'Wide grip or neutral grip'},
-      {name:'Lateral Raise', category:'Shoulders', sets:3, reps:12, note:'DB or cable'},
-      {name:'Hammer Curl', category:'Arms', sets:2, reps:12, note:'DB'},
-      {name:'Overhead Tricep Extension', category:'Arms', sets:2, reps:12, note:'DB, cable, or machine'},
-    ]
-  },
-  'Lower B': {
-    focus: 'Quads, Hamstrings, Glutes, Core (variation)',
-    color: '#dc2626',
-    exercises: [
-      {name:'Squat', category:'Quads/Glutes', sets:3, reps:10, note:'Machine, goblet, or barbell — choose at gym'},
-      {name:'Romanian Deadlift', category:'Hamstrings/Glutes', sets:3, reps:10, note:'DB or barbell'},
-      {name:'Leg Curl', category:'Hamstrings', sets:3, reps:10, note:'Seated or lying — whichever is available'},
-      {name:'Lunge', category:'Quads/Glutes', sets:3, reps:10, note:'Walking, reverse, or stationary'},
-      {name:'Plank', category:'Core', sets:3, reps:0, note:'Hold 30-60 seconds each'},
-    ]
+  'Full Body': {
+    color: '#8b5cf6',
+    groups: ['Chest', 'Back', 'Shoulders', 'Quads', 'Hamstrings', 'Glutes', 'Biceps', 'Triceps', 'Core', 'Calves']
   }
 };
 
-const WEEK_SCHEDULE = {
-  1:'Upper A', 2:'Lower A', 3:'Off', 4:'Upper B', 5:'Lower B', 0:'Off', 6:'Off'
-};
-// 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
-
-let planQueue = []; // exercises loaded from plan
+let currentFocus = null; // 'Upper', 'Lower', or 'Full Body'
+let planQueue = [];
 
 function showPlanView(){
   document.getElementById('planView').style.display='block';
   document.getElementById('pickerView').style.display='none';
   document.getElementById('exCard').style.display='none';
+  currentFocus = null;
 
   const grid = document.getElementById('planGrid');
   grid.innerHTML='';
 
-  const today = new Date().getDay();
-  const suggested = WEEK_SCHEDULE[today];
-
-  Object.entries(PLAN).forEach(([name, plan])=>{
-    const isSuggested = name === suggested;
+  // Show focus selection
+  Object.entries(MUSCLE_GROUPS).forEach(([name, cfg])=>{
     const btn = document.createElement('button');
-    btn.style.cssText=`width:100%;padding:14px 16px;border-radius:14px;background:var(--s1);border:1px solid ${isSuggested?plan.color:'var(--border)'};text-align:left;color:var(--text);display:flex;flex-direction:column;gap:4px`;
-    if(isSuggested) btn.style.boxShadow=`0 0 12px ${plan.color}33`;
-
-    const exList = plan.exercises.map(e=>e.name).join(' · ');
+    btn.style.cssText=`width:100%;padding:16px;border-radius:14px;background:var(--s1);border:1px solid ${cfg.color};text-align:left;color:var(--text);display:flex;flex-direction:column;gap:4px`;
     btn.innerHTML=`
-      <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
-        <span style="font-size:16px;font-weight:700;color:${plan.color}">${name}</span>
-        ${isSuggested?'<span style="font-size:10px;padding:3px 8px;border-radius:6px;background:'+plan.color+'22;color:'+plan.color+';font-weight:600">TODAY</span>':''}
-      </div>
-      <span style="font-size:12px;color:var(--dim)">${plan.focus}</span>
-      <span style="font-size:11px;color:var(--muted)">${exList}</span>`;
-    btn.onclick=()=>startPlanWorkout(name);
+      <span style="font-size:18px;font-weight:700;color:${cfg.color}">${name}</span>
+      <span style="font-size:12px;color:var(--dim)">${cfg.groups.join(' · ')}</span>`;
+    btn.onclick=()=>showMuscleGroups(name);
     grid.appendChild(btn);
   });
 }
 
-function startPlanWorkout(planName){
-  const plan = PLAN[planName];
-  if(!plan) return;
+function showMuscleGroups(focus){
+  currentFocus = focus;
+  const cfg = MUSCLE_GROUPS[focus];
+  if(!W.active) startWorkout();
 
-  startWorkout();
-  planQueue = [...plan.exercises];
   document.getElementById('planView').style.display='none';
+  document.getElementById('pickerView').style.display='block';
 
-  // Load first exercise from plan
-  loadNextFromPlan();
+  // Set the picker title to show current focus
+  const grid = document.getElementById('recentGrid');
+  grid.innerHTML='';
+
+  // Show muscle group pills
+  cfg.groups.forEach(group=>{
+    const wrap=document.createElement('div');
+    wrap.style.cssText='display:inline-block';
+    const btn=document.createElement('button');
+    btn.className='recent-btn';
+    btn.style.cssText=`border-color:${cfg.color}44;color:${cfg.color}`;
+    btn.textContent=group;
+    btn.onclick=()=>filterByMuscleGroup(group);
+    wrap.appendChild(btn);
+    grid.appendChild(wrap);
+  });
+
+  // Show recent exercises for this focus below
+  const focusRecent = recentEx.filter(name=>{
+    const h = history[name.toLowerCase()];
+    if(!h || !h.category) return false;
+    return cfg.groups.some(g=>h.category.toLowerCase().includes(g.toLowerCase()));
+  });
+
+  if(focusRecent.length>0){
+    const sep = document.createElement('div');
+    sep.style.cssText='width:100%;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:12px;margin-bottom:6px';
+    sep.textContent='Recent '+focus+' Exercises';
+    grid.appendChild(sep);
+
+    focusRecent.forEach(name=>{
+      const wrap=document.createElement('div');
+      wrap.style.cssText='display:inline-block';
+      const btn=document.createElement('button');
+      btn.className='recent-btn';
+      const h=history[name.toLowerCase()];
+      btn.textContent=h?name+' · '+h.weight:name;
+      btn.onclick=()=>selectExercise(name);
+      wrap.appendChild(btn);
+      grid.appendChild(wrap);
+    });
+  }
+
+  // Focus on add exercise input
+  document.getElementById('exInput').placeholder=focus+' exercise...';
+  setTimeout(()=>document.getElementById('exInput').focus(),100);
 }
 
-function loadNextFromPlan(){
-  if(planQueue.length===0){
-    showPicker(); // plan complete, free-add if they want more
-    return;
-  }
-  const next = planQueue.shift();
-  W.targetSets = next.sets;
+function filterByMuscleGroup(group){
+  // Filter recent exercises by muscle group and show, or just focus the input
+  const matching = recentEx.filter(name=>{
+    const h = history[name.toLowerCase()];
+    return h && h.category && h.category.toLowerCase().includes(group.toLowerCase());
+  });
 
-  // Show picker briefly with plan exercise pre-filled
-  document.getElementById('pickerView').style.display='none';
-  selectExercise(next.name);
+  if(matching.length>0){
+    // Show matching exercises
+    const grid = document.getElementById('recentGrid');
+    // Add matching below muscle groups
+    const existing = grid.querySelector('.muscle-matches');
+    if(existing) existing.remove();
+
+    const container = document.createElement('div');
+    container.className='muscle-matches';
+    container.style.cssText='width:100%;margin-top:8px';
+
+    const label = document.createElement('div');
+    label.style.cssText='font-size:11px;color:var(--muted);margin-bottom:6px';
+    label.textContent=group+' exercises:';
+    container.appendChild(label);
+
+    matching.forEach(name=>{
+      const btn=document.createElement('button');
+      btn.className='recent-btn';
+      btn.style.marginRight='6px';
+      btn.style.marginBottom='6px';
+      const h=history[name.toLowerCase()];
+      btn.textContent=h?name+' · '+h.weight:name;
+      btn.onclick=()=>selectExercise(name);
+      container.appendChild(btn);
+    });
+    grid.appendChild(container);
+  }
+
+  document.getElementById('exInput').placeholder=group+' exercise...';
+  document.getElementById('exInput').focus();
 }
 
 function skipPlan(){
   document.getElementById('planView').style.display='none';
   showPicker();
 }
-
-// Override finishExercise to auto-load next plan exercise
-const _origFinishExercise = finishExercise;
 
 // Restore active workout
 const saved = LS('iron_active');
@@ -511,8 +533,9 @@ function finishExercise(){
 
   W.exercises.push({name, weight:mainWeight, desc, sets:W.sets.map(s=>s.reps), allSets:W.sets});
 
-  // Save to history
-  history[name.toLowerCase()]={weight:mainWeight, desc, sets:reps, date:new Date().toISOString().split('T')[0]};
+  // Save to history (preserve existing category)
+  const existingCat = (history[name.toLowerCase()] && history[name.toLowerCase()].category) || '';
+  history[name.toLowerCase()]={weight:mainWeight, desc, sets:reps, date:new Date().toISOString().split('T')[0], category:existingCat};
   SS('iron_history', history);
 
   // Update recent
@@ -524,9 +547,9 @@ function finishExercise(){
   // Don't clear rest — user may want rest before starting next exercise
   updateLog();
 
-  // If plan exercises remain, auto-load next one
-  if(planQueue && planQueue.length>0){
-    loadNextFromPlan();
+  // Return to muscle group picker if we have a focus selected
+  if(currentFocus){
+    showMuscleGroups(currentFocus);
   } else {
     showPicker();
   }
@@ -666,8 +689,18 @@ function addFromInput(){
   let val=input.value.trim();
   if(!val)return;
   val=val.replace(/\b\w/g,c=>c.toUpperCase());
-  // Auto-start workout if not active
   if(!W.active) startWorkout();
+
+  // Save muscle group category from placeholder context
+  const placeholder = input.placeholder;
+  const category = placeholder.replace(' exercise...','');
+  if(category && category!=='Exercise name' && !history[val.toLowerCase()]){
+    // Pre-seed category for new exercises
+    history[val.toLowerCase()] = history[val.toLowerCase()] || {};
+    history[val.toLowerCase()].category = category;
+    SS('iron_history', history);
+  }
+
   selectExercise(val);
   input.value='';
 }
