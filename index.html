@@ -410,10 +410,11 @@ function calcWeight(s){
 // ===================== WORKOUT LIFECYCLE =====================
 function startWorkout(){
   W.active=true; W.start=new Date(); W.exercises=[]; W.cur=null; W.sets=[]; W.setIdx=0;
-  save(); startTimer(); showPicker();
+  save(); startTimer();
   document.getElementById('bottomBar').innerHTML=`
-    <button class="bot-btn next" onclick="showPicker()">+ Exercise</button>
-    <button class="bot-btn finish" onclick="endWorkout()">Finish</button>`;
+    <button class="bot-btn next" onclick="if(currentFocus)showMuscleGroups(currentFocus);else showPicker()">+ Exercise</button>
+    <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
+    <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
 }
 
 function discardWorkout(){
@@ -1028,12 +1029,14 @@ function startTimer(){
 // ===================== RESTORE UI =====================
 function restoreUI(){
   startTimer();
+  document.getElementById('planView').style.display='none';
   document.getElementById('bottomBar').innerHTML=`
-    <button class="bot-btn next" onclick="showPicker()">+ Exercise</button>
+    <button class="bot-btn next" onclick="showMuscleGroups(currentFocus||'Upper')">+ Exercise</button>
     <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
     <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
   updateLog();
   if(W.cur) selectExercise(W.cur);
+  else if(currentFocus) showMuscleGroups(currentFocus);
   else showPicker();
 }
 
