@@ -278,10 +278,13 @@ function showPlanView(){
 
 function showMuscleGroups(focus){
   currentFocus = focus;
+  W.focus = focus; // persist across page reload
+  save();
   const cfg = MUSCLE_GROUPS[focus];
   if(!W.active) startWorkout();
 
   document.getElementById('planView').style.display='none';
+  document.getElementById('exCard').style.display='none';
   document.getElementById('pickerView').style.display='block';
 
   // Update picker title to show focus and hide edit button
@@ -307,7 +310,9 @@ function showMuscleGroups(focus){
   const focusRecent = recentEx.filter(name=>{
     const h = history[name.toLowerCase()];
     if(!h || !h.category) return false;
-    return cfg.groups.some(g=>h.category.toLowerCase().includes(g.toLowerCase()));
+    const cat = h.category.toLowerCase();
+    // Match if category is the focus name itself (e.g., "Upper") or a specific muscle group within this focus
+    return cat === focus.toLowerCase() || cfg.groups.some(g=>cat.includes(g.toLowerCase()));
   });
 
   if(focusRecent.length>0){
@@ -322,7 +327,7 @@ function showMuscleGroups(focus){
       const btn=document.createElement('button');
       btn.className='recent-btn';
       const h=history[name.toLowerCase()];
-      btn.textContent=h?name+' · '+h.weight:name;
+      btn.textContent=(h&&h.weight)?name+' · '+h.weight:name;
       btn.onclick=()=>selectExercise(name);
       wrap.appendChild(btn);
       grid.appendChild(wrap);
@@ -363,7 +368,7 @@ function filterByMuscleGroup(group){
       btn.style.marginRight='6px';
       btn.style.marginBottom='6px';
       const h=history[name.toLowerCase()];
-      btn.textContent=h?name+' · '+h.weight:name;
+      btn.textContent=(h&&h.weight)?name+' · '+h.weight:name;
       btn.onclick=()=>selectExercise(name);
       container.appendChild(btn);
     });
@@ -375,13 +380,15 @@ function filterByMuscleGroup(group){
 }
 
 function skipPlan(){
+  currentFocus=null;
+  if(!W.active) startWorkout();
   document.getElementById('planView').style.display='none';
   showPicker();
 }
 
 // Restore active workout
 const saved = LS('iron_active');
-if(saved && saved.active){ W=saved; W.start=new Date(saved.start); restoreUI() }
+if(saved && saved.active){ W=saved; W.start=new Date(saved.start); currentFocus=saved.focus||null; restoreUI() }
 else { showPlanView() }
 
 // ===================== PLATE MATH =====================
@@ -434,7 +441,15 @@ function discardWorkout(){
 
 function endWorkout(){
   if(W.exercises.length===0 && (!W.cur || W.sets.length===0)){ alert('No exercises logged yet.'); return; }
-  if(W.cur) finishExercise();
+  if(W.cur){
+    if(W.sets.length===0){
+      // Active exercise with no logged sets — discard it silently
+      W.cur=null; W.sets=[]; W.setIdx=0;
+      document.getElementById('exCard').style.display='none';
+    } else {
+      finishExercise();
+    }
+  }
   showSummary();
 }
 
@@ -442,22 +457,30 @@ function save(){ SS('iron_active', W) }
 
 // ===================== EXERCISE MANAGEMENT =====================
 function selectExercise(name, weightStr){
-  if(W.cur) finishExercise();
+  if(W.cur){
+    if(W.sets.length===0){
+      // Active exercise with no logged sets — discard silently
+      W.cur=null; W.sets=[]; W.setIdx=0;
+    } else {
+      finishExercise();
+    }
+  }
 
   const h = history[name.toLowerCase()];
-  const lastW = h ? h.weight : '';
-  const lastSets = h ? h.sets : [];
+  const hasHistory = h && h.sets && h.sets.length > 0;
+  const lastW = hasHistory ? h.weight : '';
+  const lastSets = hasHistory ? h.sets : [];
 
   W.cur = name;
   W.sets = [];
   W.setIdx = 0;
-  W.targetSets = (h && h.sets.length) ? h.sets.length : 3;
+  W.targetSets = hasHistory ? h.sets.length : 3;
 
   document.getElementById('pickerView').style.display='none';
   const card = document.getElementById('exCard');
   card.style.display='block';
   document.getElementById('exName').textContent = name;
-  document.getElementById('exLast').textContent = h ?
+  document.getElementById('exLast').textContent = hasHistory ?
     'Last: '+h.desc+' × '+h.sets.join(', ')+' ('+h.date+')' : 'First time';
 
   // Build set rows
@@ -467,7 +490,7 @@ function selectExercise(name, weightStr){
     const row = document.createElement('div');
     row.className = 'set-row' + (i===0?' current':'');
     row.id = 'setRow'+i;
-    const sugW = lastSets.length>i && h ? h.weight : (lastW||'');
+    const sugW = lastSets.length>i && hasHistory ? h.weight : (lastW||'');
     const sugR = lastSets.length>i ? lastSets[i] : '';
     row.innerHTML=`
       <span class="set-label" id="sLbl${i}">Set ${i+1}</span>
@@ -478,21 +501,27 @@ function selectExercise(name, weightStr){
       <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
     container.appendChild(row);
   }
-  // Focus first empty reps field
+  // Focus first empty field: weight first, then reps, then reps of set 1 for returning exercises
   setTimeout(()=>{
-    const f=document.getElementById('sR0');
-    if(f&&!f.value)f.focus();
-    else{const w=document.getElementById('sW0');if(w&&!w.value)w.focus()}
+    const w0=document.getElementById('sW0');
+    const r0=document.getElementById('sR0');
+    if(w0&&!w0.value) w0.focus();
+    else if(r0&&!r0.value) r0.focus();
+    else if(r0) r0.focus(); // returning exercise — all pre-filled, focus reps so user can start logging
   },100);
   save();
 }
 
 function logSet(idx){
+  // Guard: don't double-log an already-checked set
+  const chk=document.getElementById('sC'+idx);
+  if(chk && chk.classList.contains('checked')) return;
+
   const wEl=document.getElementById('sW'+idx);
   const rEl=document.getElementById('sR'+idx);
   const w=parseFloat(wEl.value);
   const r=parseInt(rEl.value);
-  if(!w||!r)return;
+  if(isNaN(w)||w<0||!r)return; // allow weight=0 for bodyweight exercises
 
   W.sets.push({weight:w, reps:r});
   W.setIdx=idx+1;
@@ -535,7 +564,11 @@ function finishExercise(){
   const reps = W.sets.map(s=>s.reps);
   const desc = mainWeight+' lbs';
 
-  W.exercises.push({name, weight:mainWeight, desc, sets:W.sets.map(s=>s.reps), allSets:W.sets});
+  // Snapshot previous history for progressive overload comparison
+  const prevH = (history[name.toLowerCase()] && history[name.toLowerCase()].sets) ?
+    {weight:history[name.toLowerCase()].weight, sets:[...history[name.toLowerCase()].sets]} : null;
+
+  W.exercises.push({name, weight:mainWeight, desc, sets:W.sets.map(s=>s.reps), allSets:W.sets, prev:prevH});
 
   // Save to history (preserve existing category)
   const existingCat = (history[name.toLowerCase()] && history[name.toLowerCase()].category) || '';
@@ -569,6 +602,7 @@ function deleteSet(idx){
   // Rebuild set rows manually (don't call selectExercise — it resets W.sets)
   const name = W.cur;
   const h = history[name.toLowerCase()];
+  const hValid = h && h.sets && h.sets.length > 0;
   const container = document.getElementById('setRows');
   container.innerHTML='';
 
@@ -580,8 +614,8 @@ function deleteSet(idx){
     row.className = 'set-row';
     row.id = 'setRow'+i;
     const isLogged = i < savedSets.length;
-    const sugW = isLogged ? savedSets[i].weight : (h ? h.weight : '');
-    const sugR = isLogged ? savedSets[i].reps : (h && h.sets[i] ? h.sets[i] : '');
+    const sugW = isLogged ? savedSets[i].weight : (hValid ? h.weight : '');
+    const sugR = isLogged ? savedSets[i].reps : (hValid && h.sets[i] ? h.sets[i] : '');
 
     if(isLogged){
       row.classList.add('done');
@@ -661,7 +695,7 @@ function showPicker(){
     btn.className='recent-btn';
     btn.textContent=name;
     const h=history[name.toLowerCase()];
-    if(h) btn.textContent=name+' · '+h.weight;
+    if(h&&h.weight) btn.textContent=name+' · '+h.weight;
     btn.onclick=()=>{
       const picker=document.getElementById('pickerView');
       if(picker.classList.contains('edit-mode')) editRecent(name);
@@ -703,10 +737,13 @@ function addFromInput(){
   // Save muscle group category from placeholder context
   const placeholder = input.placeholder;
   const category = placeholder.replace(' exercise...','');
-  if(category && category!=='Exercise name' && !history[val.toLowerCase()]){
-    // Pre-seed category for new exercises
+  // Determine the best category: specific muscle group > focus name > nothing
+  const allGroups = Object.values(MUSCLE_GROUPS).flatMap(c=>c.groups);
+  const isValidGroup = allGroups.some(g=>g.toLowerCase()===category.toLowerCase());
+  const bestCategory = isValidGroup ? category : (currentFocus || '');
+  if(bestCategory && !history[val.toLowerCase()]){
     history[val.toLowerCase()] = history[val.toLowerCase()] || {};
-    history[val.toLowerCase()].category = category;
+    history[val.toLowerCase()].category = bestCategory;
     SS('iron_history', history);
   }
 
@@ -805,11 +842,11 @@ function showSummary(){
   html+='<div style="height:12px"></div>';
   W.exercises.forEach(ex=>{
     const sStr=ex.allSets.map(s=>s.weight+'×'+s.reps).join(', ');
-    // Check progressive overload (volume: weight × reps × sets)
-    const h=history[ex.name.toLowerCase()];
+    // Check progressive overload using pre-finish snapshot (not current history)
+    const prev=ex.prev;
     let note='';
-    if(h){
-      const prevVol=h.weight * h.sets.reduce((a,r)=>a+r,0);
+    if(prev && prev.sets){
+      const prevVol=prev.weight * prev.sets.reduce((a,r)=>a+r,0);
       const curVol=ex.allSets.reduce((a,s)=>a+s.weight*s.reps,0);
       const pctChange=((curVol-prevVol)/prevVol)*100;
       if(pctChange>2) note=' ↑';
@@ -827,7 +864,7 @@ function submitWorkout(){
   const dur=Math.floor((new Date()-startDate)/60000);
   const totalVol=W.exercises.reduce((s,e)=>s+e.allSets.reduce((a,set)=>a+set.weight*set.reps,0),0);
   let done=LS('iron_completed')||[];
-  done.push({date:W.start.toISOString(),dur,exercises:W.exercises,volume:totalVol});
+  done.push({date:startDate.toISOString(),dur,exercises:W.exercises,volume:totalVol});
   if(done.length>100) done=done.slice(-100);
   SS('iron_completed',done);
   localStorage.removeItem('iron_active');
@@ -897,7 +934,7 @@ function saveEdit(){
   ex.allSets.forEach((s,i)=>{
     const w = parseFloat(document.getElementById('eW'+i).value);
     const r = parseInt(document.getElementById('eR'+i).value);
-    if(w) s.weight=w;
+    if(!isNaN(w) && w>=0) s.weight=w;
     if(r) { s.reps=r; ex.sets[i]=r; }
   });
   ex.weight = ex.allSets[0].weight;
@@ -991,18 +1028,18 @@ function shareToJoe(){
   const date=new Date().toISOString().split('T')[0];
   const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
-  let body=`IRON WORKOUT: ${date} (${day})%0A`;
-  body+=`Duration: ${dur} min | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs%0A%0A`;
+  let body=`IRON WORKOUT: ${date} (${day})\n`;
+  body+=`Duration: ${dur} min | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n\n`;
 
   W.exercises.forEach(ex=>{
     const sStr=ex.allSets.map(s=>s.weight+'x'+s.reps).join(', ');
-    body+=`${ex.name}: ${sStr}%0A`;
+    body+=`${ex.name}: ${sStr}\n`;
   });
 
-  body+='%0A--- Iron PWA ---';
+  body+='\n--- Iron PWA ---';
 
   const subject=`IRON: ${day} Workout ${date} - ${W.exercises.length} exercises, ${totalVol.toLocaleString()} lbs`;
-  const mailto=`mailto:michael@willisedge.com?subject=${encodeURIComponent(subject)}&body=${body}`;
+  const mailto=`mailto:michael@willisedge.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
   window.location.href=mailto;
 }
@@ -1041,13 +1078,59 @@ function restoreUI(){
   startTimer();
   document.getElementById('planView').style.display='none';
   document.getElementById('bottomBar').innerHTML=`
-    <button class="bot-btn next" onclick="showMuscleGroups(currentFocus||'Upper')">+ Exercise</button>
+    <button class="bot-btn next" onclick="if(currentFocus)showMuscleGroups(currentFocus);else showPicker()">+ Exercise</button>
     <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
     <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
   updateLog();
-  if(W.cur) selectExercise(W.cur);
+  if(W.cur) restoreExerciseCard();
   else if(currentFocus) showMuscleGroups(currentFocus);
   else showPicker();
+}
+
+// Rebuild exercise card from saved state WITHOUT resetting W.sets/setIdx
+function restoreExerciseCard(){
+  const name = W.cur;
+  const h = history[name.toLowerCase()];
+  const hasHistory = h && h.sets && h.sets.length > 0;
+
+  document.getElementById('pickerView').style.display='none';
+  const card = document.getElementById('exCard');
+  card.style.display='block';
+  document.getElementById('exName').textContent = name;
+  document.getElementById('exLast').textContent = hasHistory ?
+    'Last: '+h.desc+' × '+h.sets.join(', ')+' ('+h.date+')' : 'First time';
+
+  const container = document.getElementById('setRows');
+  container.innerHTML='';
+  for(let i=0;i<W.targetSets;i++){
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.id = 'setRow'+i;
+    const isLogged = i < W.sets.length;
+
+    if(isLogged){
+      row.classList.add('done');
+      row.innerHTML=`
+        <span class="set-label done-label" id="sLbl${i}">✓ Set ${i+1}</span>
+        <input class="w-input" id="sW${i}" type="number" inputmode="decimal" value="${W.sets[i].weight}" readonly style="opacity:.5">
+        <span class="x-label">×</span>
+        <input class="r-input" id="sR${i}" type="number" inputmode="numeric" value="${W.sets[i].reps}" readonly style="opacity:.5">
+        <button class="set-check checked" id="sC${i}" onclick="logSet(${i})">✓</button>
+        <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
+    } else {
+      if(i === W.setIdx) row.classList.add('current');
+      const sugW = hasHistory ? h.weight : (W.sets.length>0 ? W.sets[W.sets.length-1].weight : '');
+      const sugR = hasHistory && h.sets[i] ? h.sets[i] : '';
+      row.innerHTML=`
+        <span class="set-label" id="sLbl${i}">Set ${i+1}</span>
+        <input class="w-input" id="sW${i}" type="number" inputmode="decimal" placeholder="lbs" value="${sugW}" onfocus="this.select()">
+        <span class="x-label">×</span>
+        <input class="r-input" id="sR${i}" type="number" inputmode="numeric" placeholder="reps" value="${sugR}" onfocus="this.select()">
+        <button class="set-check" id="sC${i}" onclick="logSet(${i})">✓</button>
+        <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
+    }
+    container.appendChild(row);
+  }
 }
 
 // ===================== iOS AUDIO CONTEXT INIT =====================
