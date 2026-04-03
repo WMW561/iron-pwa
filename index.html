@@ -253,7 +253,7 @@ const MUSCLE_GROUPS = {
 };
 
 let currentFocus = null; // 'Upper', 'Lower', or 'Full Body'
-let planQueue = [];
+// planQueue removed — no longer used in muscle group flow
 
 function showPlanView(){
   document.getElementById('planView').style.display='block';
@@ -284,7 +284,9 @@ function showMuscleGroups(focus){
   document.getElementById('planView').style.display='none';
   document.getElementById('pickerView').style.display='block';
 
-  // Set the picker title to show current focus
+  // Update picker title to show focus and hide edit button
+  document.querySelector('#pickerView .picker-title').textContent = focus.toUpperCase() + ' — SELECT MUSCLE GROUP';
+  document.getElementById('editRecentBtn').style.display='none';
   const grid = document.getElementById('recentGrid');
   grid.innerHTML='';
 
@@ -426,11 +428,12 @@ function discardWorkout(){
   document.getElementById('timer').textContent='00:00';
   clearRest();
   if(timerInt)clearInterval(timerInt);
-  document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="startWorkout()">START WORKOUT</button>`;
-  showPicker();
+  document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="showPlanView()">START WORKOUT</button>`;
+  showPlanView();
 }
 
 function endWorkout(){
+  if(W.exercises.length===0 && (!W.cur || W.sets.length===0)){ alert('No exercises logged yet.'); return; }
   if(W.cur) finishExercise();
   showSummary();
 }
@@ -617,7 +620,8 @@ function addSetRow(){
     <input class="w-input" id="sW${i}" type="number" inputmode="decimal" placeholder="lbs" value="${lastW}" onfocus="this.select()">
     <span class="x-label">×</span>
     <input class="r-input" id="sR${i}" type="number" inputmode="numeric" placeholder="reps" onfocus="this.select()">
-    <button class="set-check" id="sC${i}" onclick="logSet(${i})">✓</button>`;
+    <button class="set-check" id="sC${i}" onclick="logSet(${i})">✓</button>
+    <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
   container.appendChild(row);
 }
 
@@ -642,6 +646,10 @@ function showPicker(){
   document.getElementById('planView').style.display='none';
   const p=document.getElementById('pickerView');
   p.style.display='block';
+  // Restore picker title and edit button
+  document.querySelector('#pickerView .picker-title').textContent = 'RECENT EXERCISES';
+  document.getElementById('editRecentBtn').style.display='';
+  document.getElementById('exInput').placeholder='Exercise name...';
   // Keep log visible below picker
   updateLog();
   const grid=document.getElementById('recentGrid');
@@ -815,7 +823,8 @@ function showSummary(){
 
 function submitWorkout(){
   // Save completed workout (cap at 100)
-  const dur=Math.floor((new Date()-W.start)/60000);
+  const startDate = W.start instanceof Date ? W.start : new Date(W.start);
+  const dur=Math.floor((new Date()-startDate)/60000);
   const totalVol=W.exercises.reduce((s,e)=>s+e.allSets.reduce((a,set)=>a+set.weight*set.reps,0),0);
   let done=LS('iron_completed')||[];
   done.push({date:W.start.toISOString(),dur,exercises:W.exercises,volume:totalVol});
@@ -833,7 +842,7 @@ function submitWorkout(){
   document.getElementById('timer').textContent='00:00';
   clearRest();
   if(timerInt)clearInterval(timerInt);
-  document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="startWorkout()">START WORKOUT</button>`;
+  document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="showPlanView()">START WORKOUT</button>`;
   showPlanView();
 }
 
@@ -900,7 +909,8 @@ function saveEdit(){
     recentEx = recentEx.map(e=>e.toLowerCase()===oldName.toLowerCase()?ex.name:e);
     SS('iron_recent', recentEx);
   }
-  history[ex.name.toLowerCase()]={weight:ex.weight, desc:ex.desc, sets:ex.sets, date:new Date().toISOString().split('T')[0]};
+  const editCat = (history[ex.name.toLowerCase()] && history[ex.name.toLowerCase()].category) || '';
+  history[ex.name.toLowerCase()]={weight:ex.weight, desc:ex.desc, sets:ex.sets, date:new Date().toISOString().split('T')[0], category:editCat};
   SS('iron_history', history);
 
   closeEdit();
@@ -1039,6 +1049,20 @@ function restoreUI(){
   else if(currentFocus) showMuscleGroups(currentFocus);
   else showPicker();
 }
+
+// ===================== iOS AUDIO CONTEXT INIT =====================
+// iOS requires user gesture to init AudioContext — do it on first tap
+let audioCtxReady = false;
+document.addEventListener('touchstart', function initAudio(){
+  if(audioCtxReady) return;
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();
+    osc.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime+0.001); // silent init
+    audioCtxReady=true;
+  }catch(e){}
+}, {once:true});
 
 // ===================== SERVICE WORKER =====================
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
