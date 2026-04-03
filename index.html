@@ -75,9 +75,7 @@ input{font-family:inherit;outline:none}
 .act-btn:active{background:var(--s2)}
 .act-btn.primary{border-color:var(--green);color:var(--green)}
 
-/* Rest Timer */
-.rest-bar{display:none;padding:12px 16px;background:var(--s1);border-top:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center}
-.rest-bar.show{display:block}
+/* Rest Timer — see fixed-position version below */
 .rest-time{font-size:28px;font-weight:900;color:var(--text);font-variant-numeric:tabular-nums}
 .rest-label{font-size:11px;color:var(--muted);margin-top:2px}
 
@@ -131,6 +129,33 @@ input{font-family:inherit;outline:none}
 .modal .close{width:100%;height:48px;border-radius:12px;background:var(--red);color:#fff;font-size:15px;font-weight:700;margin-top:16px}
 
 /* Voice overlay removed — iOS PWA blocks Web Speech API */
+
+/* Custom Dialog */
+.dialog-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;align-items:center;justify-content:center;padding:20px}
+.dialog-bg.show{display:flex}
+.dialog-box{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:320px;text-align:center}
+.dialog-box .msg{font-size:15px;color:var(--text);margin-bottom:16px;line-height:1.4}
+.dialog-btns{display:flex;gap:8px}
+.dialog-btns button{flex:1;height:44px;border-radius:10px;font-size:14px;font-weight:700}
+.dialog-cancel{background:var(--s2);border:1px solid var(--border);color:var(--dim)}
+.dialog-ok{background:var(--red);border:none;color:#fff}
+.dialog-ok.green{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
+
+/* Muscle Group Prompt */
+.group-prompt{display:none;padding:12px 16px;background:var(--s1);border-bottom:1px solid var(--border)}
+.group-prompt.show{display:block}
+.group-prompt .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.group-prompt .pills{display:flex;flex-wrap:wrap;gap:6px}
+.group-prompt .pill{padding:6px 12px;border-radius:16px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600}
+.group-prompt .pill:active{border-color:var(--red);color:var(--text)}
+
+/* Weekly Stats */
+.week-stats{padding:8px 16px;font-size:12px;color:var(--dim);text-align:center;border-bottom:1px solid var(--border)}
+.week-stats .num{color:var(--text);font-weight:700}
+
+/* Rest Timer — fixed position to prevent layout shift */
+.rest-bar{display:none;position:fixed;top:49px;left:0;right:0;z-index:50;padding:12px 16px;background:var(--s1);border-bottom:1px solid var(--border);text-align:center}
+.rest-bar.show{display:block}
 </style>
 </head>
 <body>
@@ -150,6 +175,9 @@ input{font-family:inherit;outline:none}
   <div class="rest-time" id="restTime">1:30</div>
   <div class="rest-label">REST (tap to change)</div>
 </div>
+
+<!-- Weekly Stats Banner -->
+<div class="week-stats" id="weekStats" style="display:none"></div>
 
 <!-- Workout Focus Selector -->
 <div id="planView" class="picker">
@@ -180,7 +208,7 @@ input{font-family:inherit;outline:none}
   <div class="ex-actions">
     <button class="act-btn" onclick="addSetRow()">+ Set</button>
     <button class="act-btn" onclick="toggleType()">Type</button>
-    <button class="act-btn primary" onclick="finishExercise()">Done ✓</button>
+    <button class="act-btn primary" onclick="finishExercise()">Next Exercise</button>
   </div>
 </div>
 
@@ -188,9 +216,7 @@ input{font-family:inherit;outline:none}
 <div class="log" id="logView"></div>
 
 <!-- Bottom bar -->
-<div class="bottom" id="bottomBar">
-  <button class="bot-btn start" id="startBtn" onclick="showPlanView()">START WORKOUT</button>
-</div>
+<div class="bottom" id="bottomBar"></div>
 
 <!-- Workout History Panel -->
 <div class="modal-bg" id="historyModal">
@@ -207,7 +233,7 @@ input{font-family:inherit;outline:none}
   <div class="modal">
     <h2>WORKOUT SUMMARY</h2>
     <div id="summaryBody"></div>
-    <button class="close" onclick="submitWorkout()">SUBMIT WORKOUT</button>
+    <button class="close" onclick="submitWorkout()">SAVE WORKOUT</button>
     <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600;margin-top:8px" onclick="closeSummary()">Back to Edit</button>
     <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;margin-top:8px" onclick="exportData()">Export All Data (JSON)</button>
   </div>
@@ -227,6 +253,26 @@ input{font-family:inherit;outline:none}
 
 <!-- Voice overlay removed — iOS PWA blocks Web Speech API. Using speed-first manual input instead. -->
 
+<!-- Custom Dialog Modal -->
+<div class="dialog-bg" id="dialogModal">
+  <div class="dialog-box">
+    <div class="msg" id="dialogMsg"></div>
+    <div id="dialogInput" style="display:none;margin-bottom:12px">
+      <input type="text" id="dialogInputField" style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--text);font-size:15px;padding:0 14px;text-align:center">
+    </div>
+    <div class="dialog-btns">
+      <button class="dialog-cancel" id="dialogCancel" onclick="resolveDialog(false)">Cancel</button>
+      <button class="dialog-ok" id="dialogOk" onclick="resolveDialog(true)">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Muscle Group Prompt (Free Workout) -->
+<div class="group-prompt" id="groupPrompt">
+  <div class="label">WHAT MUSCLE GROUP?</div>
+  <div class="pills" id="groupPills"></div>
+</div>
+
 <script>
 // ===================== STATE =====================
 let W = { active:false, start:null, exercises:[], cur:null, sets:[], setIdx:0, targetSets:3 };
@@ -235,6 +281,66 @@ const SS = (k,v) => localStorage.setItem(k, JSON.stringify(v));
 let history = LS('iron_history') || {};
 let recentEx = LS('iron_recent') || [];
 let restInterval = null;
+
+// ===================== CUSTOM DIALOG =====================
+let _dialogResolve = null;
+function showDialog(msg, opts={}){
+  return new Promise(resolve=>{
+    _dialogResolve = resolve;
+    document.getElementById('dialogMsg').textContent = msg;
+    const cancel = document.getElementById('dialogCancel');
+    const ok = document.getElementById('dialogOk');
+    const inputWrap = document.getElementById('dialogInput');
+    const inputField = document.getElementById('dialogInputField');
+    // Configure
+    cancel.style.display = opts.alert ? 'none' : '';
+    ok.textContent = opts.okText || 'OK';
+    ok.className = 'dialog-ok' + (opts.green ? ' green' : '');
+    cancel.textContent = opts.cancelText || 'Cancel';
+    if(opts.input !== undefined){
+      inputWrap.style.display='block';
+      inputField.value = opts.input;
+      setTimeout(()=>inputField.select(),100);
+    } else {
+      inputWrap.style.display='none';
+    }
+    document.getElementById('dialogModal').classList.add('show');
+  });
+}
+function resolveDialog(ok){
+  document.getElementById('dialogModal').classList.remove('show');
+  if(_dialogResolve){
+    const inputWrap = document.getElementById('dialogInput');
+    if(ok && inputWrap.style.display==='block'){
+      _dialogResolve(document.getElementById('dialogInputField').value);
+    } else {
+      _dialogResolve(ok);
+    }
+    _dialogResolve=null;
+  }
+}
+
+// ===================== HELPERS =====================
+function fmtWeight(w){ return w===0 ? 'BW' : w; }
+function fmtSet(s){ return fmtWeight(s.weight)+'×'+s.reps; }
+function calcVolume(exercises){
+  return exercises.reduce((s,e)=>s+e.allSets.reduce((a,set)=>a+(set.weight>0?set.weight*set.reps:0),0),0);
+}
+
+// ===================== WEEKLY STATS =====================
+function updateWeekStats(){
+  const done = LS('iron_completed') || [];
+  if(done.length===0){ document.getElementById('weekStats').style.display='none'; return; }
+  const now = new Date();
+  const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate()-now.getDay()); startOfWeek.setHours(0,0,0,0);
+  const thisWeek = done.filter(w=>new Date(w.date)>=startOfWeek);
+  if(thisWeek.length===0){ document.getElementById('weekStats').style.display='none'; return; }
+  const sets = thisWeek.reduce((s,w)=>s+(w.exercises||[]).reduce((a,e)=>a+(e.sets||e.allSets||[]).length,0),0);
+  const vol = thisWeek.reduce((s,w)=>s+(w.volume||0),0);
+  const el = document.getElementById('weekStats');
+  el.style.display='block';
+  el.innerHTML=`This week: <span class="num">${thisWeek.length}</span> session${thisWeek.length!==1?'s':''} · <span class="num">${sets}</span> sets · <span class="num">${vol.toLocaleString()}</span> lbs`;
+}
 
 // ===================== TRAINING PLAN =====================
 const MUSCLE_GROUPS = {
@@ -259,7 +365,9 @@ function showPlanView(){
   document.getElementById('planView').style.display='block';
   document.getElementById('pickerView').style.display='none';
   document.getElementById('exCard').style.display='none';
+  document.getElementById('groupPrompt').classList.remove('show');
   currentFocus = null;
+  updateWeekStats();
 
   const grid = document.getElementById('planGrid');
   grid.innerHTML='';
@@ -389,7 +497,7 @@ function skipPlan(){
 // Restore active workout
 const saved = LS('iron_active');
 if(saved && saved.active){ W=saved; W.start=new Date(saved.start); currentFocus=saved.focus||null; restoreUI() }
-else { showPlanView() }
+else { showPlanView(); updateWeekStats() }
 
 // ===================== PLATE MATH =====================
 function calcWeight(s){
@@ -426,8 +534,9 @@ function startWorkout(){
     <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
 }
 
-function discardWorkout(){
-  if(!confirm('Discard this workout? All data will be lost.')) return;
+async function discardWorkout(){
+  const ok = await showDialog('Discard this workout? All data will be lost.', {okText:'Discard'});
+  if(!ok) return;
   localStorage.removeItem('iron_active');
   W={active:false,start:null,exercises:[],cur:null,sets:[],setIdx:0,targetSets:3};
   document.getElementById('exCard').style.display='none';
@@ -435,12 +544,12 @@ function discardWorkout(){
   document.getElementById('timer').textContent='00:00';
   clearRest();
   if(timerInt)clearInterval(timerInt);
-  document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="showPlanView()">START WORKOUT</button>`;
+  document.getElementById('bottomBar').innerHTML='';
   showPlanView();
 }
 
 function endWorkout(){
-  if(W.exercises.length===0 && (!W.cur || W.sets.length===0)){ alert('No exercises logged yet.'); return; }
+  if(W.exercises.length===0 && (!W.cur || W.sets.length===0)){ showDialog('No exercises logged yet.',{alert:true,okText:'OK'}); return; }
   if(W.cur){
     if(W.sets.length===0){
       // Active exercise with no logged sets — discard it silently
@@ -558,7 +667,7 @@ function logSet(idx){
 
 function finishExercise(){
   if(!W.cur) return;
-  if(W.sets.length===0){ alert('Log at least one set first.'); return; }
+  if(W.sets.length===0){ showDialog('Log at least one set first.',{alert:true,okText:'OK'}); return; }
   const name=W.cur;
   const mainWeight = W.sets[0].weight;
   const reps = W.sets.map(s=>s.reps);
@@ -737,11 +846,19 @@ function addFromInput(){
   // Save muscle group category from placeholder context
   const placeholder = input.placeholder;
   const category = placeholder.replace(' exercise...','');
-  // Determine the best category: specific muscle group > focus name > nothing
   const allGroups = Object.values(MUSCLE_GROUPS).flatMap(c=>c.groups);
   const isValidGroup = allGroups.some(g=>g.toLowerCase()===category.toLowerCase());
   const bestCategory = isValidGroup ? category : (currentFocus || '');
-  if(bestCategory && !history[val.toLowerCase()]){
+
+  // If new exercise with no category and no focus, prompt for muscle group
+  const existingCat = history[val.toLowerCase()] && history[val.toLowerCase()].category;
+  if(!bestCategory && !existingCat){
+    showGroupPrompt(val);
+    input.value='';
+    return;
+  }
+
+  if(bestCategory && !existingCat){
     history[val.toLowerCase()] = history[val.toLowerCase()] || {};
     history[val.toLowerCase()].category = bestCategory;
     SS('iron_history', history);
@@ -749,6 +866,38 @@ function addFromInput(){
 
   selectExercise(val);
   input.value='';
+}
+
+function showGroupPrompt(exerciseName){
+  const prompt = document.getElementById('groupPrompt');
+  const pills = document.getElementById('groupPills');
+  pills.innerHTML='';
+  const allGroups = Object.values(MUSCLE_GROUPS).flatMap(c=>c.groups);
+  const unique = [...new Set(allGroups)];
+  unique.forEach(group=>{
+    const btn=document.createElement('button');
+    btn.className='pill';
+    btn.textContent=group;
+    btn.onclick=()=>{
+      history[exerciseName.toLowerCase()] = history[exerciseName.toLowerCase()] || {};
+      history[exerciseName.toLowerCase()].category = group;
+      SS('iron_history', history);
+      prompt.classList.remove('show');
+      selectExercise(exerciseName);
+    };
+    pills.appendChild(btn);
+  });
+  // Add "Skip" option
+  const skip=document.createElement('button');
+  skip.className='pill';
+  skip.style.cssText='color:var(--muted);border-color:var(--muted)';
+  skip.textContent='Skip';
+  skip.onclick=()=>{
+    prompt.classList.remove('show');
+    selectExercise(exerciseName);
+  };
+  pills.appendChild(skip);
+  prompt.classList.add('show');
 }
 
 // ===================== REST TIMER (from Strong) =====================
@@ -817,7 +966,7 @@ function updateLog(){
   if(W.exercises.length===0){v.innerHTML='';return}
   let html='<h3>Completed</h3>';
   W.exercises.forEach((ex,idx)=>{
-    const sStr=ex.allSets.map(s=>s.weight+'×'+s.reps).join(', ');
+    const sStr=ex.allSets.map(s=>fmtSet(s)).join(', ');
     html+=`<div class="log-item" onclick="toggleLogItem(${idx})">
       <div style="display:flex;justify-content:space-between"><span class="log-name">${ex.name}</span><span class="log-sets">${sStr}</span></div>
       <div class="log-actions">
@@ -833,7 +982,7 @@ function updateLog(){
 function showSummary(){
   const dur=Math.floor((new Date()-W.start)/60000);
   const totalSets=W.exercises.reduce((s,e)=>s+e.sets.length,0);
-  const totalVol=W.exercises.reduce((s,e)=>s+e.allSets.reduce((a,set)=>a+set.weight*set.reps,0),0);
+  const totalVol=calcVolume(W.exercises);
   let html='';
   html+=`<div class="row"><span class="lbl">Duration</span><span class="val">${dur} min</span></div>`;
   html+=`<div class="row"><span class="lbl">Exercises</span><span class="val">${W.exercises.length}</span></div>`;
@@ -841,18 +990,28 @@ function showSummary(){
   html+=`<div class="row"><span class="lbl">Volume</span><span class="val">${totalVol.toLocaleString()} lbs</span></div>`;
   html+='<div style="height:12px"></div>';
   W.exercises.forEach(ex=>{
-    const sStr=ex.allSets.map(s=>s.weight+'×'+s.reps).join(', ');
-    // Check progressive overload using pre-finish snapshot (not current history)
+    const sStr=ex.allSets.map(s=>fmtSet(s)).join(', ');
+    // Progressive overload comparison
     const prev=ex.prev;
-    let note='';
+    let badge='';
     if(prev && prev.sets){
       const prevVol=prev.weight * prev.sets.reduce((a,r)=>a+r,0);
       const curVol=ex.allSets.reduce((a,s)=>a+s.weight*s.reps,0);
-      const pctChange=((curVol-prevVol)/prevVol)*100;
-      if(pctChange>2) note=' ↑';
-      else if(pctChange<-10) note=' ↓'; // only flag significant drops
+      const wDiff=ex.weight-prev.weight;
+      if(wDiff>0) badge=`<span style="color:var(--green);font-size:11px;font-weight:700"> ↑${wDiff}lbs</span>`;
+      else if(wDiff<0) badge=`<span style="color:var(--red);font-size:11px;font-weight:700"> ↓${Math.abs(wDiff)}lbs</span>`;
+      else {
+        // Same weight — compare total reps
+        const prevReps=prev.sets.reduce((a,r)=>a+r,0);
+        const curReps=ex.sets.reduce((a,r)=>a+r,0);
+        if(curReps>prevReps) badge=`<span style="color:var(--green);font-size:11px;font-weight:700"> +${curReps-prevReps}reps</span>`;
+        else if(curReps<prevReps) badge=`<span style="color:var(--red);font-size:11px;font-weight:700"> -${prevReps-curReps}reps</span>`;
+        else badge=`<span style="color:var(--dim);font-size:11px"> →same</span>`;
+      }
+    } else {
+      badge=`<span style="color:var(--blue);font-size:11px"> NEW</span>`;
     }
-    html+=`<div class="row"><span class="lbl">${ex.name}${note}</span><span class="val">${sStr}</span></div>`;
+    html+=`<div class="row"><span class="lbl">${ex.name}${badge}</span><span class="val">${sStr}</span></div>`;
   });
   document.getElementById('summaryBody').innerHTML=html;
   document.getElementById('summaryModal').classList.add('show');
@@ -862,7 +1021,7 @@ function submitWorkout(){
   // Save completed workout (cap at 100)
   const startDate = W.start instanceof Date ? W.start : new Date(W.start);
   const dur=Math.floor((new Date()-startDate)/60000);
-  const totalVol=W.exercises.reduce((s,e)=>s+e.allSets.reduce((a,set)=>a+set.weight*set.reps,0),0);
+  const totalVol=calcVolume(W.exercises);
   let done=LS('iron_completed')||[];
   done.push({date:startDate.toISOString(),dur,exercises:W.exercises,volume:totalVol});
   if(done.length>100) done=done.slice(-100);
@@ -879,7 +1038,7 @@ function submitWorkout(){
   document.getElementById('timer').textContent='00:00';
   clearRest();
   if(timerInt)clearInterval(timerInt);
-  document.getElementById('bottomBar').innerHTML=`<button class="bot-btn start" onclick="showPlanView()">START WORKOUT</button>`;
+  document.getElementById('bottomBar').innerHTML='';
   showPlanView();
 }
 
@@ -960,8 +1119,9 @@ function closeEdit(){
   document.getElementById('editModal').classList.remove('show');
 }
 
-function deleteExercise(idx){
-  if(!confirm('Delete '+W.exercises[idx].name+'?')) return;
+async function deleteExercise(idx){
+  const ok = await showDialog('Delete '+W.exercises[idx].name+'?', {okText:'Delete'});
+  if(!ok) return;
   W.exercises.splice(idx,1);
   updateLog();
   save();
@@ -980,8 +1140,8 @@ function deleteRecent(name){
   showPicker();
 }
 
-function editRecent(oldName){
-  const newName = prompt('Rename exercise:', oldName);
+async function editRecent(oldName){
+  const newName = await showDialog('Rename exercise:', {input:oldName, okText:'Rename', green:true});
   if(!newName || !newName.trim() || newName.trim()===oldName) return;
   const cleaned = newName.trim().replace(/\b\w/g,c=>c.toUpperCase());
 
@@ -1011,7 +1171,7 @@ function showHistory(){
     html+=`<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">`;
     html+=`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-weight:700;font-size:14px">${dateStr}</span><span style="color:var(--dim);font-size:12px">${w.dur}min · ${w.volume?.toLocaleString()||'?'}lbs</span></div>`;
     (w.exercises||[]).forEach(ex=>{
-      const sStr=(ex.allSets||[]).map(s=>s.weight+'×'+s.reps).join(', ');
+      const sStr=(ex.allSets||[]).map(s=>(s.weight===0?'BW':s.weight)+'×'+s.reps).join(', ');
       html+=`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span style="color:var(--text)">${ex.name}</span><span style="color:var(--dim)">${sStr}</span></div>`;
     });
     html+=`</div>`;
@@ -1021,9 +1181,9 @@ function showHistory(){
 }
 
 // ===================== SHARE TO JOE =====================
-function shareToJoe(){
+async function shareToJoe(){
   const dur=Math.floor((new Date()-W.start)/60000);
-  const totalVol=W.exercises.reduce((s,e)=>s+e.allSets.reduce((a,set)=>a+set.weight*set.reps,0),0);
+  const totalVol=calcVolume(W.exercises);
   const totalSets=W.exercises.reduce((s,e)=>s+e.sets.length,0);
   const date=new Date().toISOString().split('T')[0];
   const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
@@ -1032,16 +1192,29 @@ function shareToJoe(){
   body+=`Duration: ${dur} min | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n\n`;
 
   W.exercises.forEach(ex=>{
-    const sStr=ex.allSets.map(s=>s.weight+'x'+s.reps).join(', ');
+    const sStr=ex.allSets.map(s=>fmtSet(s)).join(', ');
     body+=`${ex.name}: ${sStr}\n`;
   });
 
   body+='\n--- Iron PWA ---';
 
-  const subject=`IRON: ${day} Workout ${date} - ${W.exercises.length} exercises, ${totalVol.toLocaleString()} lbs`;
-  const mailto=`mailto:michael@willisedge.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const title=`IRON: ${day} Workout ${date}`;
 
-  window.location.href=mailto;
+  // Web Share API (iOS Safari, Android)
+  if(navigator.share){
+    try{
+      await navigator.share({title, text:body});
+      return;
+    }catch(e){} // user cancelled or not supported
+  }
+  // Clipboard fallback
+  try{
+    await navigator.clipboard.writeText(body);
+    showDialog('Workout copied to clipboard! Paste it to Joe.',{alert:true,okText:'Got it',green:true});
+  }catch(e){
+    // Final fallback — select text
+    showDialog(body,{alert:true,okText:'OK'});
+  }
 }
 
 // ===================== DATA EXPORT =====================
