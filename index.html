@@ -792,8 +792,10 @@ async function discardWorkout(){
   showPlanView();
 }
 
+let _endingWorkout = false; // flag to suppress program auto-advance during endWorkout
 function endWorkout(){
   if(W.exercises.length===0 && (!W.cur || W.sets.length===0)){ showDialog('No exercises logged yet.',{alert:true,okText:'OK'}); return; }
+  _endingWorkout = true;
   if(W.cur){
     if(W.sets.length===0){
       // Active exercise with no logged sets — discard it silently
@@ -803,6 +805,7 @@ function endWorkout(){
       finishExercise();
     }
   }
+  _endingWorkout = false;
   showSummary();
 }
 
@@ -940,8 +943,8 @@ function finishExercise(){
   // Update bottom bar progress count
   if(programDay) updateBottomBar();
 
-  // Program mode: auto-advance to next exercise
-  if(programDay){
+  // Program mode: auto-advance to next exercise (unless endWorkout triggered this)
+  if(programDay && !_endingWorkout){
     const day = PROGRAM.schedule[programDay];
     const nextIdx = programIdx + 1;
     if(nextIdx < day.exercises.length){
@@ -950,7 +953,7 @@ function finishExercise(){
       // All program exercises done
       endWorkout();
     }
-  } else if(currentFocus){
+  } else if(!programDay && currentFocus){
     showMuscleGroups(currentFocus);
   } else {
     showPicker();
