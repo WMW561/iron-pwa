@@ -1,5 +1,5 @@
 // Iron Service Worker v2 — network-first for reliability
-const CACHE_NAME = 'iron-v5';
+const CACHE_NAME = 'iron-v6';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

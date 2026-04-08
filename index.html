@@ -359,7 +359,66 @@ const MUSCLE_GROUPS = {
 };
 
 let currentFocus = null; // 'Upper', 'Lower', or 'Full Body'
-// planQueue removed — no longer used in muscle group flow
+
+// ===================== MAXIMUM HYPERTROPHY PROGRAM =====================
+const PROGRAM = {
+  name: 'Maximum Hypertrophy Plan',
+  schedule: {
+    'upper_a': {
+      label: 'Upper A', sub: 'Push Emphasis', day: 'Monday', color: '#3b82f6', icon: '🔵',
+      warmup: '5 min cardio + band pull-aparts 2×15 + arm circles',
+      exercises: [
+        { name: 'Incline DB Press', category: 'Chest', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: '30-45° incline. Full ROM. DBs to outer chest.' },
+        { name: 'Flat DB Press', category: 'Chest', sets: 3, reps: '10-12', tempo: '3-0-1', rest: 120, cue: 'Slight arch. Full stretch at bottom.' },
+        { name: 'Seated OH Press (DB)', category: 'Shoulders', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Seated for back support. Full lockout at top.' },
+        { name: 'Cable Lateral Raise', category: 'Shoulders', sets: 3, reps: '12-15', tempo: '2-1-1', rest: 90, cue: 'Constant tension. Pinky slightly up. Slow lowering.' },
+        { name: 'Seated Cable Row (Wide)', category: 'Back', sets: 3, reps: '10-12', tempo: '2-1-2', rest: 120, cue: 'Wide grip. Squeeze scapulae. Balances pressing.' },
+        { name: 'OH Tricep Extension (Cable)', category: 'Triceps', sets: 3, reps: '12-15', tempo: '2-1-1', rest: 90, cue: 'Full stretch at bottom. Long head = mass head.' }
+      ]
+    },
+    'lower_a': {
+      label: 'Lower A', sub: 'Quad Emphasis', day: 'Tuesday', color: '#dc2626', icon: '🔴',
+      warmup: 'Copenhagen plank 2×15s/side + Glute bridge march 2×6/side',
+      exercises: [
+        { name: 'Leg Press', category: 'Quads', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Feet shoulder-width, mid-platform. Full depth 90°+.' },
+        { name: 'Bulgarian Split Squat', category: 'Quads', sets: 3, reps: '8-10/leg', tempo: '3-1-1', rest: 120, cue: 'Bench-sit to find stance. Lean forward — hip hinge. Heel drives.' },
+        { name: 'Leg Extension', category: 'Quads', sets: 3, reps: '12-15', tempo: '2-2-1', rest: 90, cue: 'Pause at top. Slow eccentric. Full ROM.' },
+        { name: 'Leg Curl', category: 'Hamstrings', sets: 3, reps: '10-12', tempo: '2-1-2', rest: 90, cue: 'Squeeze at contraction. Slow return.' },
+        { name: 'Single-Leg Calf Raise', category: 'Calves', sets: 3, reps: '10-12/side', tempo: '2-1-3', rest: 60, cue: 'Full ROM. Heel below step, full extension top. No bounce.' },
+        { name: 'Hanging Knee Raise', category: 'Core', sets: 3, reps: '10-15', tempo: 'ctrl', rest: 60, cue: 'Slow, controlled. No swinging. Core bracing.' }
+      ]
+    },
+    'upper_b': {
+      label: 'Upper B', sub: 'Pull Emphasis', day: 'Thursday', color: '#8b5cf6', icon: '🟣',
+      warmup: '5 min cardio + face pulls 2×15 + scapular wall slides',
+      exercises: [
+        { name: 'Lat Pulldown (Wide)', category: 'Back', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Slight lean back. Pull to upper chest. Squeeze bottom.' },
+        { name: 'Chest-Supported Row', category: 'Back', sets: 4, reps: '10-12', tempo: '2-1-2', rest: 120, cue: 'Chest on pad = no low back fatigue. Retract scapulae hard.' },
+        { name: 'Flat DB Press', category: 'Chest', sets: 3, reps: '10-12', tempo: '2-0-1', rest: 120, cue: 'Lighter than Monday. Volume for growth, not strength.' },
+        { name: 'Face Pulls (Cable Rope)', category: 'Shoulders', sets: 3, reps: '15-20', tempo: '1-2-1', rest: 60, cue: 'High reps. 2s squeeze hold. Shoulder health at 65.' },
+        { name: 'Incline DB Curl', category: 'Biceps', sets: 3, reps: '10-12', tempo: '3-0-1', rest: 90, cue: '45° incline. Full stretch at bottom. Slow eccentric.' },
+        { name: 'Cable Pushdown (Rope)', category: 'Triceps', sets: 3, reps: '12-15', tempo: '2-1-1', rest: 90, cue: 'Split rope at bottom. 2nd tricep frequency hit.' }
+      ]
+    },
+    'lower_b': {
+      label: 'Lower B', sub: 'Posterior Chain', day: 'Friday', color: '#f59e0b', icon: '🟡',
+      warmup: 'Copenhagen plank 2×15s/side + Glute bridge march 2×8/side (3s hold)',
+      exercises: [
+        { name: 'Romanian Deadlift', category: 'Hamstrings', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Hinge at hips. Bar/DBs trace legs. Feel hamstring stretch. Don\'t round.' },
+        { name: 'Step-Up + Knee Drive', category: 'Glutes', sets: 3, reps: '8-10/leg', tempo: '1-1-3', rest: 120, cue: 'Hover bottom foot. No push-off. Drive through heel. 3s lowering.' },
+        { name: 'Leg Curl', category: 'Hamstrings', sets: 4, reps: '10-12', tempo: '2-1-2', rest: 90, cue: 'Higher volume today — hams are the priority.' },
+        { name: 'Hip Thrust', category: 'Glutes', sets: 3, reps: '10-12', tempo: '2-2-1', rest: 120, cue: 'Full lockout. 2s squeeze at top. Bench at mid-scapula.' },
+        { name: 'Single-Leg Calf Raise', category: 'Calves', sets: 3, reps: '10-12/side', tempo: '2-1-3', rest: 60, cue: 'On step edge. Full ROM. Slow eccentric.' },
+        { name: 'Tibialis Wall Raise', category: 'Core', sets: 3, reps: '15', tempo: '1-1-2', rest: 60, cue: 'Back to wall, heels 6" out. Toes to shins. Balances calf work.' }
+      ]
+    }
+  }
+};
+
+// Program workout state
+let programDay = null; // key from PROGRAM.schedule (e.g., 'upper_a')
+let programQueue = []; // remaining exercises to do
+let programIdx = 0; // current exercise index in the day
 
 function showPlanView(){
   document.getElementById('planView').style.display='block';
@@ -367,21 +426,176 @@ function showPlanView(){
   document.getElementById('exCard').style.display='none';
   document.getElementById('groupPrompt').classList.remove('show');
   currentFocus = null;
+  programDay = null;
+  programQueue = [];
+  programIdx = 0;
   updateWeekStats();
 
   const grid = document.getElementById('planGrid');
   grid.innerHTML='';
 
-  // Show focus selection
-  Object.entries(MUSCLE_GROUPS).forEach(([name, cfg])=>{
+  // Determine today's suggested day
+  const dayOfWeek = new Date().getDay(); // 0=Sun
+  const dayMap = {1:'upper_a', 2:'lower_a', 4:'upper_b', 5:'lower_b'};
+  const suggestedDay = dayMap[dayOfWeek] || null;
+
+  // Show program title
+  const title = document.createElement('div');
+  title.style.cssText='font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px';
+  title.textContent='MAXIMUM HYPERTROPHY PLAN';
+  grid.appendChild(title);
+
+  // Show 4 program days
+  Object.entries(PROGRAM.schedule).forEach(([key, day])=>{
+    const isSuggested = key === suggestedDay;
     const btn = document.createElement('button');
-    btn.style.cssText=`width:100%;padding:16px;border-radius:14px;background:var(--s1);border:1px solid ${cfg.color};text-align:left;color:var(--text);display:flex;flex-direction:column;gap:4px`;
+    btn.style.cssText=`width:100%;padding:14px 16px;border-radius:14px;background:var(--s1);border:${isSuggested?'2':'1'}px solid ${day.color};text-align:left;color:var(--text);display:flex;align-items:center;gap:12px;${isSuggested?'box-shadow:0 0 12px '+day.color+'33;':''}`;
+    const exCount = day.exercises.length;
+    const totalSets = day.exercises.reduce((s,e)=>s+e.sets,0);
     btn.innerHTML=`
-      <span style="font-size:18px;font-weight:700;color:${cfg.color}">${name}</span>
-      <span style="font-size:12px;color:var(--dim)">${cfg.groups.join(' · ')}</span>`;
-    btn.onclick=()=>showMuscleGroups(name);
+      <span style="font-size:24px">${day.icon}</span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:16px;font-weight:700;color:${day.color}">${day.label}</span>
+          ${isSuggested?'<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:'+day.color+'22;color:'+day.color+';font-weight:600">TODAY</span>':''}
+        </div>
+        <span style="font-size:12px;color:var(--dim)">${day.sub} — ${day.day}</span>
+        <span style="font-size:11px;color:var(--muted)">${exCount} exercises · ${totalSets} sets</span>
+      </div>`;
+    btn.onclick=()=>startProgramDay(key);
     grid.appendChild(btn);
   });
+
+  // Separator
+  const sep = document.createElement('div');
+  sep.style.cssText='border-top:1px solid var(--border);margin:4px 0';
+  grid.appendChild(sep);
+
+  // Legacy focus buttons (compact)
+  const legacyRow = document.createElement('div');
+  legacyRow.style.cssText='display:flex;gap:8px';
+  Object.entries(MUSCLE_GROUPS).forEach(([name, cfg])=>{
+    const btn = document.createElement('button');
+    btn.style.cssText=`flex:1;padding:10px;border-radius:10px;background:var(--s1);border:1px solid var(--border);text-align:center;color:var(--dim);font-size:12px;font-weight:600`;
+    btn.textContent=name;
+    btn.onclick=()=>showMuscleGroups(name);
+    legacyRow.appendChild(btn);
+  });
+  grid.appendChild(legacyRow);
+}
+
+// ===================== PROGRAM WORKOUT FLOW =====================
+function startProgramDay(dayKey){
+  const day = PROGRAM.schedule[dayKey];
+  if(!day) return;
+
+  programDay = dayKey;
+  programQueue = day.exercises.map((e,i)=>({...e, idx:i}));
+  programIdx = 0;
+
+  // Ensure exercise categories are saved to history
+  day.exercises.forEach(ex=>{
+    const key = ex.name.toLowerCase();
+    if(!history[key]) history[key] = {};
+    if(!history[key].category) history[key].category = ex.category;
+  });
+  SS('iron_history', history);
+
+  if(!W.active) startWorkout();
+  W.programDay = dayKey;
+  W.programIdx = 0;
+  save();
+
+  // Show warmup then start first exercise
+  showProgramExercise(0);
+}
+
+function showProgramExercise(idx){
+  const day = PROGRAM.schedule[programDay];
+  if(!day || idx >= day.exercises.length){
+    // All exercises done — end workout
+    endWorkout();
+    return;
+  }
+
+  programIdx = idx;
+  W.programIdx = idx;
+  save();
+
+  const ex = day.exercises[idx];
+  const total = day.exercises.length;
+
+  // Hide other views
+  document.getElementById('planView').style.display='none';
+  document.getElementById('pickerView').style.display='none';
+
+  // Select the exercise with program context
+  selectProgramExercise(ex, idx, total, day);
+}
+
+function selectProgramExercise(pgEx, idx, total, day){
+  if(W.cur){
+    if(W.sets.length===0){
+      W.cur=null; W.sets=[]; W.setIdx=0;
+    } else {
+      finishExercise();
+    }
+  }
+
+  const name = pgEx.name;
+  const h = history[name.toLowerCase()];
+  const hasHistory = h && h.sets && h.sets.length > 0;
+  const lastW = hasHistory ? h.weight : '';
+
+  W.cur = name;
+  W.sets = [];
+  W.setIdx = 0;
+  W.targetSets = pgEx.sets;
+
+  document.getElementById('pickerView').style.display='none';
+  const card = document.getElementById('exCard');
+  card.style.display='block';
+  document.getElementById('exName').innerHTML = `<span style="color:var(--muted);font-size:12px;font-weight:600">${idx+1}/${total}</span> ${name}`;
+
+  // Program prescription info
+  let lastInfo = hasHistory ? `Last: ${h.desc} × ${h.sets.join(', ')} (${h.date})` : 'First time — establish weight';
+  document.getElementById('exLast').innerHTML = `
+    <div style="margin-bottom:6px">${lastInfo}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+      <span style="background:var(--s2);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--text);font-style:normal;font-weight:600">Rx: ${pgEx.sets}×${pgEx.reps}</span>
+      <span style="background:var(--s2);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--yellow);font-style:normal">Tempo: ${pgEx.tempo}</span>
+      <span style="background:var(--s2);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--blue);font-style:normal">Rest: ${pgEx.rest>=120?pgEx.rest/60+'min':pgEx.rest+'s'}</span>
+    </div>
+    <div style="font-size:11px;color:var(--dim);font-style:normal">${pgEx.cue}</div>`;
+
+  // Set rest duration to match prescription
+  restDuration = pgEx.rest;
+
+  // Build set rows
+  const container = document.getElementById('setRows');
+  container.innerHTML='';
+  for(let i=0;i<W.targetSets;i++){
+    const row = document.createElement('div');
+    row.className = 'set-row' + (i===0?' current':'');
+    row.id = 'setRow'+i;
+    const sugW = hasHistory ? h.weight : '';
+    const sugR = hasHistory && h.sets[i] ? h.sets[i] : '';
+    row.innerHTML=`
+      <span class="set-label" id="sLbl${i}">Set ${i+1}</span>
+      <input class="w-input" id="sW${i}" type="number" inputmode="decimal" placeholder="lbs" value="${sugW}" onfocus="this.select()">
+      <span class="x-label">×</span>
+      <input class="r-input" id="sR${i}" type="number" inputmode="numeric" placeholder="reps" value="${sugR}" onfocus="this.select()">
+      <button class="set-check" id="sC${i}" onclick="logSet(${i})">✓</button>
+      <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
+    container.appendChild(row);
+  }
+  setTimeout(()=>{
+    const w0=document.getElementById('sW0');
+    const r0=document.getElementById('sR0');
+    if(w0&&!w0.value) w0.focus();
+    else if(r0) r0.focus();
+  },100);
+  save();
 }
 
 function showMuscleGroups(focus){
@@ -528,10 +742,39 @@ function calcWeight(s){
 function startWorkout(){
   W.active=true; W.start=new Date(); W.exercises=[]; W.cur=null; W.sets=[]; W.setIdx=0;
   save(); startTimer();
-  document.getElementById('bottomBar').innerHTML=`
-    <button class="bot-btn next" onclick="if(currentFocus)showMuscleGroups(currentFocus);else showPicker()">+ Exercise</button>
-    <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
-    <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
+  updateBottomBar();
+}
+
+function updateBottomBar(){
+  if(programDay){
+    const day = PROGRAM.schedule[programDay];
+    const total = day.exercises.length;
+    const done = W.exercises.length;
+    document.getElementById('bottomBar').innerHTML=`
+      <button class="bot-btn next" onclick="skipProgramExercise()" style="flex:0.6">Skip</button>
+      <button class="bot-btn finish" onclick="endWorkout()" style="flex:1"><span style="font-size:11px;color:var(--dim);margin-right:4px">${done}/${total}</span> Finish</button>
+      <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
+  } else {
+    document.getElementById('bottomBar').innerHTML=`
+      <button class="bot-btn next" onclick="if(currentFocus)showMuscleGroups(currentFocus);else showPicker()">+ Exercise</button>
+      <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
+      <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
+  }
+}
+
+function skipProgramExercise(){
+  // Skip current exercise without logging
+  if(!programDay) return;
+  W.cur=null; W.sets=[]; W.setIdx=0;
+  document.getElementById('exCard').style.display='none';
+  const day = PROGRAM.schedule[programDay];
+  const nextIdx = programIdx + 1;
+  if(nextIdx < day.exercises.length){
+    showProgramExercise(nextIdx);
+  } else {
+    if(W.exercises.length > 0) endWorkout();
+    else showDialog('No exercises logged.',{alert:true,okText:'OK'});
+  }
 }
 
 async function discardWorkout(){
@@ -539,6 +782,7 @@ async function discardWorkout(){
   if(!ok) return;
   localStorage.removeItem('iron_active');
   W={active:false,start:null,exercises:[],cur:null,sets:[],setIdx:0,targetSets:3};
+  programDay=null; programQueue=[]; programIdx=0;
   document.getElementById('exCard').style.display='none';
   document.getElementById('logView').innerHTML='';
   document.getElementById('timer').textContent='00:00';
@@ -693,8 +937,20 @@ function finishExercise(){
   // Don't clear rest — user may want rest before starting next exercise
   updateLog();
 
-  // Return to muscle group picker if we have a focus selected
-  if(currentFocus){
+  // Update bottom bar progress count
+  if(programDay) updateBottomBar();
+
+  // Program mode: auto-advance to next exercise
+  if(programDay){
+    const day = PROGRAM.schedule[programDay];
+    const nextIdx = programIdx + 1;
+    if(nextIdx < day.exercises.length){
+      showProgramExercise(nextIdx);
+    } else {
+      // All program exercises done
+      endWorkout();
+    }
+  } else if(currentFocus){
     showMuscleGroups(currentFocus);
   } else {
     showPicker();
@@ -984,6 +1240,10 @@ function showSummary(){
   const totalSets=W.exercises.reduce((s,e)=>s+e.sets.length,0);
   const totalVol=calcVolume(W.exercises);
   let html='';
+  if(programDay && PROGRAM.schedule[programDay]){
+    const day = PROGRAM.schedule[programDay];
+    html+=`<div class="row"><span class="lbl">Program</span><span class="val">${day.label} — ${day.sub}</span></div>`;
+  }
   html+=`<div class="row"><span class="lbl">Duration</span><span class="val">${dur} min</span></div>`;
   html+=`<div class="row"><span class="lbl">Exercises</span><span class="val">${W.exercises.length}</span></div>`;
   html+=`<div class="row"><span class="lbl">Total Sets</span><span class="val">${totalSets}</span></div>`;
@@ -1034,6 +1294,7 @@ function submitWorkout(){
   // Clear everything
   document.getElementById('summaryModal').classList.remove('show');
   W={active:false,start:null,exercises:[],cur:null,sets:[],setIdx:0,targetSets:3};
+  programDay=null; programQueue=[]; programIdx=0;
   document.getElementById('logView').innerHTML='';
   document.getElementById('timer').textContent='00:00';
   clearRest();
@@ -1188,8 +1449,9 @@ async function shareToJoe(){
   const date=new Date().toISOString().split('T')[0];
   const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
+  const pgLabel = (W.programDay && PROGRAM.schedule[W.programDay]) ? PROGRAM.schedule[W.programDay].label+' — '+PROGRAM.schedule[W.programDay].sub+' | ' : '';
   let body=`IRON WORKOUT: ${date} (${day})\n`;
-  body+=`Duration: ${dur} min | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n\n`;
+  body+=`${pgLabel}Duration: ${dur} min | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n\n`;
 
   W.exercises.forEach(ex=>{
     const sStr=ex.allSets.map(s=>fmtSet(s)).join(', ');
@@ -1250,14 +1512,84 @@ function startTimer(){
 function restoreUI(){
   startTimer();
   document.getElementById('planView').style.display='none';
-  document.getElementById('bottomBar').innerHTML=`
-    <button class="bot-btn next" onclick="if(currentFocus)showMuscleGroups(currentFocus);else showPicker()">+ Exercise</button>
-    <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
-    <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
+
+  // Restore program state if applicable
+  if(W.programDay && PROGRAM.schedule[W.programDay]){
+    programDay = W.programDay;
+    programIdx = W.programIdx || 0;
+  }
+
+  updateBottomBar();
   updateLog();
-  if(W.cur) restoreExerciseCard();
+  if(W.cur){
+    if(programDay) restoreProgramExerciseCard();
+    else restoreExerciseCard();
+  }
+  else if(programDay) showProgramExercise(programIdx);
   else if(currentFocus) showMuscleGroups(currentFocus);
   else showPicker();
+}
+
+function restoreProgramExerciseCard(){
+  const day = PROGRAM.schedule[programDay];
+  if(!day) { restoreExerciseCard(); return; }
+  const pgEx = day.exercises[programIdx];
+  if(!pgEx) { restoreExerciseCard(); return; }
+
+  const name = W.cur;
+  const h = history[name.toLowerCase()];
+  const hasHistory = h && h.sets && h.sets.length > 0;
+  const total = day.exercises.length;
+
+  document.getElementById('pickerView').style.display='none';
+  const card = document.getElementById('exCard');
+  card.style.display='block';
+  document.getElementById('exName').innerHTML = `<span style="color:var(--muted);font-size:12px;font-weight:600">${programIdx+1}/${total}</span> ${name}`;
+
+  let lastInfo = hasHistory ? `Last: ${h.desc} × ${h.sets.join(', ')} (${h.date})` : 'First time';
+  document.getElementById('exLast').innerHTML = `
+    <div style="margin-bottom:6px">${lastInfo}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+      <span style="background:var(--s2);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--text);font-style:normal;font-weight:600">Rx: ${pgEx.sets}×${pgEx.reps}</span>
+      <span style="background:var(--s2);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--yellow);font-style:normal">Tempo: ${pgEx.tempo}</span>
+      <span style="background:var(--s2);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--blue);font-style:normal">Rest: ${pgEx.rest>=120?pgEx.rest/60+'min':pgEx.rest+'s'}</span>
+    </div>
+    <div style="font-size:11px;color:var(--dim);font-style:normal">${pgEx.cue}</div>`;
+
+  restDuration = pgEx.rest;
+
+  // Rebuild set rows preserving logged state
+  const container = document.getElementById('setRows');
+  container.innerHTML='';
+  for(let i=0;i<W.targetSets;i++){
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.id = 'setRow'+i;
+    const isLogged = i < W.sets.length;
+
+    if(isLogged){
+      row.classList.add('done');
+      row.innerHTML=`
+        <span class="set-label done-label" id="sLbl${i}">✓ Set ${i+1}</span>
+        <input class="w-input" id="sW${i}" type="number" inputmode="decimal" value="${W.sets[i].weight}" readonly style="opacity:.5">
+        <span class="x-label">×</span>
+        <input class="r-input" id="sR${i}" type="number" inputmode="numeric" value="${W.sets[i].reps}" readonly style="opacity:.5">
+        <button class="set-check checked" id="sC${i}" onclick="logSet(${i})">✓</button>
+        <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
+    } else {
+      if(i === W.setIdx) row.classList.add('current');
+      const sugW = hasHistory ? h.weight : (W.sets.length>0 ? W.sets[W.sets.length-1].weight : '');
+      const sugR = hasHistory && h.sets[i] ? h.sets[i] : '';
+      row.innerHTML=`
+        <span class="set-label" id="sLbl${i}">Set ${i+1}</span>
+        <input class="w-input" id="sW${i}" type="number" inputmode="decimal" placeholder="lbs" value="${sugW}" onfocus="this.select()">
+        <span class="x-label">×</span>
+        <input class="r-input" id="sR${i}" type="number" inputmode="numeric" placeholder="reps" value="${sugR}" onfocus="this.select()">
+        <button class="set-check" id="sC${i}" onclick="logSet(${i})">✓</button>
+        <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
+    }
+    container.appendChild(row);
+  }
 }
 
 // Rebuild exercise card from saved state WITHOUT resetting W.sets/setIdx
