@@ -943,8 +943,10 @@ function finishExercise(){
   // Update bottom bar progress count
   if(programDay) updateBottomBar();
 
-  // Program mode: auto-advance to next exercise (unless endWorkout triggered this)
-  if(programDay && !_endingWorkout){
+  // If endWorkout triggered this, don't navigate — summary will show
+  if(_endingWorkout) { /* no-op */ }
+  // Program mode: auto-advance to next exercise
+  else if(programDay){
     const day = PROGRAM.schedule[programDay];
     const nextIdx = programIdx + 1;
     if(nextIdx < day.exercises.length){
@@ -953,7 +955,7 @@ function finishExercise(){
       // All program exercises done
       endWorkout();
     }
-  } else if(!programDay && currentFocus){
+  } else if(currentFocus){
     showMuscleGroups(currentFocus);
   } else {
     showPicker();
