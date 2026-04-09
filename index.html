@@ -200,6 +200,11 @@ input{font-family:inherit;outline:none}
   </div>
 </div>
 
+<!-- Program Overview (shown before starting exercises) -->
+<div id="programOverview" class="picker" style="display:none">
+  <div id="overviewContent"></div>
+</div>
+
 <!-- Active exercise (shown when logging) -->
 <div id="exCard" class="ex-card">
   <div class="ex-name" id="exName"></div>
@@ -437,6 +442,7 @@ function showPlanView(){
   document.getElementById('planView').style.display='block';
   document.getElementById('pickerView').style.display='none';
   document.getElementById('exCard').style.display='none';
+  document.getElementById('programOverview').style.display='none';
   document.getElementById('groupPrompt').classList.remove('show');
   currentFocus = null;
   programDay = null;
@@ -504,7 +510,72 @@ function startProgramDay(dayKey){
   W.programIdx = 0;
   save();
 
-  // Show warmup then start first exercise
+  // Show overview before starting exercises
+  showProgramOverview(dayKey);
+}
+
+function showProgramOverview(dayKey){
+  const day = PROGRAM.schedule[dayKey];
+  if(!day) return;
+
+  document.getElementById('planView').style.display='none';
+  document.getElementById('pickerView').style.display='none';
+  document.getElementById('exCard').style.display='none';
+  const ov = document.getElementById('programOverview');
+  ov.style.display='block';
+
+  const totalSets = day.exercises.reduce((s,e)=>s+e.sets,0);
+  let html = '';
+
+  // Header
+  html += `<div style="text-align:center;margin-bottom:12px">`;
+  html += `<div style="font-size:24px;margin-bottom:4px">${day.icon}</div>`;
+  html += `<div style="font-size:20px;font-weight:900;color:${day.color}">${day.label}</div>`;
+  html += `<div style="font-size:13px;color:var(--dim)">${day.sub} — ${day.day}</div>`;
+  html += `<div style="font-size:12px;color:var(--muted);margin-top:4px">${day.exercises.length} exercises · ${totalSets} sets</div>`;
+  html += `</div>`;
+
+  // Warmup
+  html += `<div style="background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">`;
+  html += `<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px">Warm-up</div>`;
+  html += `<div style="font-size:12px;color:var(--dim)">${day.warmup}</div>`;
+  html += `</div>`;
+
+  // Exercise list
+  day.exercises.forEach((ex, i) => {
+    const h = history[ex.name.toLowerCase()];
+    const hasH = h && h.allSets && h.allSets.length > 0;
+    const hasSets = h && h.sets && h.sets.length > 0;
+
+    // Last session info
+    let lastStr = '';
+    if(hasH){
+      lastStr = h.allSets.map(s=>s.weight+'×'+s.reps).join(', ');
+    } else if(hasSets){
+      lastStr = h.weight + ' × ' + h.sets.join(', ');
+    }
+
+    const isActive = i === 0;
+    html += `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;${i < day.exercises.length-1 ? 'border-bottom:1px solid var(--border);' : ''}">`;
+    html += `<div style="width:24px;height:24px;border-radius:12px;background:${isActive ? day.color+'22' : 'var(--s2)'};border:1px solid ${isActive ? day.color : 'var(--border)'};color:${isActive ? day.color : 'var(--muted)'};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>`;
+    html += `<div style="flex:1;min-width:0">`;
+    html += `<div style="font-size:14px;font-weight:600;color:var(--text)">${ex.name}</div>`;
+    html += `<div style="font-size:11px;color:var(--muted);margin-top:1px">${ex.sets}×${ex.reps} · ${ex.tempo} · ${ex.rest>=120?ex.rest/60+'min':ex.rest+'s'}</div>`;
+    if(lastStr){
+      html += `<div style="font-size:11px;color:var(--dim);margin-top:2px">Last: ${lastStr}</div>`;
+    }
+    html += `</div>`;
+    html += `</div>`;
+  });
+
+  // Start button
+  html += `<button onclick="beginProgramExercises()" style="width:100%;height:50px;border-radius:14px;background:${day.color};color:#fff;font-size:16px;font-weight:700;border:none;margin-top:16px;cursor:pointer">START WORKOUT</button>`;
+
+  document.getElementById('overviewContent').innerHTML = html;
+}
+
+function beginProgramExercises(){
+  document.getElementById('programOverview').style.display='none';
   showProgramExercise(0);
 }
 
