@@ -411,6 +411,19 @@ const PROGRAM = {
         { name: 'Single-Leg Calf Raise', category: 'Calves', sets: 3, reps: '10-12/side', tempo: '2-1-3', rest: 60, cue: 'On step edge. Full ROM. Slow eccentric.' },
         { name: 'Tibialis Wall Raise', category: 'Core', sets: 3, reps: '15', tempo: '1-1-2', rest: 60, cue: 'Back to wall, heels 6" out. Toes to shins. Balances calf work.' }
       ]
+    },
+    'full_body': {
+      label: 'Full Body', sub: 'Compounds Only', day: 'Flexible', color: '#22c55e', icon: '🟢',
+      warmup: '5 min cardio + band pull-aparts 2×15 + bodyweight squats 2×10',
+      exercises: [
+        { name: 'Incline DB Press', category: 'Chest', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: '30-45° incline. Full ROM. DBs to outer chest.' },
+        { name: 'Lat Pulldown (Wide)', category: 'Back', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Slight lean back. Pull to upper chest. Squeeze bottom.' },
+        { name: 'Seated OH Press (DB)', category: 'Shoulders', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 120, cue: 'Seated for back support. Full lockout at top.' },
+        { name: 'Leg Press', category: 'Quads', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Feet shoulder-width, mid-platform. Full depth 90°+.' },
+        { name: 'Romanian Deadlift', category: 'Hamstrings', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Hinge at hips. Bar/DBs trace legs. Feel hamstring stretch. Don\'t round.' },
+        { name: 'Face Pulls (Cable Rope)', category: 'Shoulders', sets: 2, reps: '15-20', tempo: '1-2-1', rest: 60, cue: 'High reps. 2s squeeze hold. Shoulder health at 65.' },
+        { name: 'Hanging Knee Raise', category: 'Core', sets: 2, reps: '10-15', tempo: 'ctrl', rest: 60, cue: 'Slow, controlled. No swinging. Core bracing.' }
+      ]
     }
   }
 };
@@ -467,21 +480,6 @@ function showPlanView(){
   });
 
   // Separator
-  const sep = document.createElement('div');
-  sep.style.cssText='border-top:1px solid var(--border);margin:4px 0';
-  grid.appendChild(sep);
-
-  // Legacy focus buttons (compact)
-  const legacyRow = document.createElement('div');
-  legacyRow.style.cssText='display:flex;gap:8px';
-  Object.entries(MUSCLE_GROUPS).forEach(([name, cfg])=>{
-    const btn = document.createElement('button');
-    btn.style.cssText=`flex:1;padding:10px;border-radius:10px;background:var(--s1);border:1px solid var(--border);text-align:center;color:var(--dim);font-size:12px;font-weight:600`;
-    btn.textContent=name;
-    btn.onclick=()=>showMuscleGroups(name);
-    legacyRow.appendChild(btn);
-  });
-  grid.appendChild(legacyRow);
 }
 
 // ===================== PROGRAM WORKOUT FLOW =====================
@@ -751,15 +749,42 @@ function updateBottomBar(){
     const total = day.exercises.length;
     const done = W.exercises.length;
     document.getElementById('bottomBar').innerHTML=`
-      <button class="bot-btn next" onclick="skipProgramExercise()" style="flex:0.6">Skip</button>
+      <button class="bot-btn next" onclick="skipProgramExercise()" style="flex:0.5">Skip</button>
       <button class="bot-btn finish" onclick="endWorkout()" style="flex:1"><span style="font-size:11px;color:var(--dim);margin-right:4px">${done}/${total}</span> Finish</button>
+      <button style="position:absolute;top:-30px;left:16px;font-size:11px;color:var(--muted);background:none" onclick="goHome()">✕ Home</button>
       <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
   } else {
     document.getElementById('bottomBar').innerHTML=`
       <button class="bot-btn next" onclick="if(currentFocus)showMuscleGroups(currentFocus);else showPicker()">+ Exercise</button>
       <button class="bot-btn finish" onclick="endWorkout()">Finish</button>
+      <button style="position:absolute;top:-30px;left:16px;font-size:11px;color:var(--muted);background:none" onclick="goHome()">✕ Home</button>
       <button style="position:absolute;top:-30px;right:16px;font-size:11px;color:var(--muted);background:none" onclick="discardWorkout()">Discard</button>`;
   }
+}
+
+async function goHome(){
+  if(W.active && (W.exercises.length > 0 || (W.cur && W.sets.length > 0))){
+    const ok = await showDialog('Go home? Your workout will be saved and you can resume later.', {okText:'Go Home', green:true});
+    if(!ok) return;
+  }
+  // Save current state so it can be resumed
+  save();
+  // Reset UI to plan view
+  document.getElementById('exCard').style.display='none';
+  document.getElementById('pickerView').style.display='none';
+  document.getElementById('groupPrompt').classList.remove('show');
+  clearRest();
+  // If no exercises logged, fully discard
+  if(W.exercises.length === 0 && (!W.cur || W.sets.length === 0)){
+    localStorage.removeItem('iron_active');
+    W={active:false,start:null,exercises:[],cur:null,sets:[],setIdx:0,targetSets:3};
+    programDay=null; programQueue=[]; programIdx=0;
+    if(timerInt)clearInterval(timerInt);
+    document.getElementById('timer').textContent='00:00';
+    document.getElementById('logView').innerHTML='';
+    document.getElementById('bottomBar').innerHTML='';
+  }
+  showPlanView();
 }
 
 function skipProgramExercise(){
