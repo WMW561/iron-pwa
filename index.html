@@ -1448,29 +1448,49 @@ function showHistory(){
 
 // ===================== SHARE TO JOE =====================
 async function shareToJoe(){
-  const dur=Math.floor((new Date()-W.start)/60000);
+  const startDate = W.start instanceof Date ? W.start : new Date(W.start);
+  const dur=Math.floor((new Date()-startDate)/60000);
   const totalVol=calcVolume(W.exercises);
   const totalSets=W.exercises.reduce((s,e)=>s+e.sets.length,0);
   const date=new Date().toISOString().split('T')[0];
   const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
 
-  const pgLabel = (W.programDay && PROGRAM.schedule[W.programDay]) ? PROGRAM.schedule[W.programDay].label+' — '+PROGRAM.schedule[W.programDay].sub+' | ' : '';
-  let body=`IRON WORKOUT: ${date} (${day})\n`;
-  body+=`${pgLabel}Duration: ${dur} min | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n\n`;
+  // Program info
+  const pgDay = W.programDay && PROGRAM.schedule[W.programDay] ? PROGRAM.schedule[W.programDay] : null;
+  const pgLabel = pgDay ? `${pgDay.label} — ${pgDay.sub}` : 'Free Workout';
 
-  W.exercises.forEach(ex=>{
-    const sStr=ex.allSets.map(s=>fmtSet(s)).join(', ');
-    body+=`${ex.name}: ${sStr}\n`;
+  // Structured format for Joe auto-parsing
+  let body = `IRON WORKOUT: ${date} (${day})\n`;
+  body += `Program: ${pgLabel}\n`;
+  body += `Duration: ${dur} min | Exercises: ${W.exercises.length} | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n`;
+  body += `---\n`;
+
+  W.exercises.forEach((ex,i)=>{
+    // Exercise line: name | set details | progressive overload
+    const sStr = ex.allSets.map(s=>fmtSet(s)).join(', ');
+    let poTag = '';
+    if(ex.prev && ex.prev.sets){
+      const prevVol = ex.prev.weight * ex.prev.sets.reduce((a,r)=>a+r,0);
+      const curVol = ex.allSets.reduce((a,s)=>a+s.weight*s.reps,0);
+      if(ex.weight > ex.prev.weight) poTag = ` [+${ex.weight-ex.prev.weight}lbs]`;
+      else if(curVol > prevVol) poTag = ` [+${curVol-prevVol}vol]`;
+      else if(curVol === prevVol) poTag = ' [=]';
+    } else {
+      poTag = ' [NEW]';
+    }
+    body += `${i+1}. ${ex.name}: ${sStr}${poTag}\n`;
   });
 
-  body+='\n--- Iron PWA ---';
+  body += `---\n`;
+  body += `Iron PWA | ${PROGRAM.name}`;
 
-  const title=`IRON: ${day} Workout ${date}`;
+  // Email subject for auto-parsing
+  const subject = `IRON: ${pgLabel} — ${date}`;
 
   // Web Share API (iOS Safari, Android)
   if(navigator.share){
     try{
-      await navigator.share({title, text:body});
+      await navigator.share({title: subject, text: body});
       return;
     }catch(e){} // user cancelled or not supported
   }
@@ -1479,7 +1499,6 @@ async function shareToJoe(){
     await navigator.clipboard.writeText(body);
     showDialog('Workout copied to clipboard! Paste it to Joe.',{alert:true,okText:'Got it',green:true});
   }catch(e){
-    // Final fallback — select text
     showDialog(body,{alert:true,okText:'OK'});
   }
 }
