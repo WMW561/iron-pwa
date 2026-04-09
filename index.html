@@ -555,8 +555,13 @@ function selectProgramExercise(pgEx, idx, total, day){
   card.style.display='block';
   document.getElementById('exName').innerHTML = `<span style="color:var(--muted);font-size:12px;font-weight:600">${idx+1}/${total}</span> ${name}`;
 
-  // Program prescription info
-  let lastInfo = hasHistory ? `Last: ${h.desc} × ${h.sets.join(', ')} (${h.date})` : 'First time — establish weight';
+  // Program prescription info — show per-set details if available
+  let lastInfo = 'First time — establish weight';
+  if(hasHistory && h.allSets){
+    lastInfo = `Last: ${h.allSets.map(s=>s.weight+'×'+s.reps).join(', ')} (${h.date})`;
+  } else if(hasHistory){
+    lastInfo = `Last: ${h.desc} × ${h.sets.join(', ')} (${h.date})`;
+  }
   document.getElementById('exLast').innerHTML = `
     <div style="margin-bottom:6px">${lastInfo}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
@@ -569,15 +574,31 @@ function selectProgramExercise(pgEx, idx, total, day){
   // Set rest duration to match prescription
   restDuration = pgEx.rest;
 
-  // Build set rows
+  // Build set rows with smart pre-fill from per-set history
   const container = document.getElementById('setRows');
   container.innerHTML='';
+  const lastAllSets = hasHistory && h.allSets ? h.allSets : null;
+
   for(let i=0;i<W.targetSets;i++){
     const row = document.createElement('div');
     row.className = 'set-row' + (i===0?' current':'');
     row.id = 'setRow'+i;
-    const sugW = hasHistory ? h.weight : '';
-    const sugR = hasHistory && h.sets[i] ? h.sets[i] : '';
+
+    // Smart pre-fill: use per-set history if available, else fall back to single weight
+    let sugW = '';
+    let sugR = '';
+    if(lastAllSets && lastAllSets[i]){
+      sugW = lastAllSets[i].weight;
+      sugR = lastAllSets[i].reps;
+    } else if(lastAllSets && lastAllSets.length > 0){
+      // More sets prescribed than last time — use last set's weight
+      sugW = lastAllSets[lastAllSets.length-1].weight;
+      sugR = '';
+    } else if(hasHistory){
+      sugW = h.weight;
+      sugR = h.sets && h.sets[i] ? h.sets[i] : '';
+    }
+
     row.innerHTML=`
       <span class="set-label" id="sLbl${i}">Set ${i+1}</span>
       <input class="w-input" id="sW${i}" type="number" inputmode="decimal" placeholder="lbs" value="${sugW}" onfocus="this.select()">
@@ -951,9 +972,9 @@ function finishExercise(){
 
   W.exercises.push({name, weight:mainWeight, desc, sets:W.sets.map(s=>s.reps), allSets:W.sets, prev:prevH});
 
-  // Save to history (preserve existing category)
+  // Save to history (preserve existing category, store per-set data for smart pre-fill)
   const existingCat = (history[name.toLowerCase()] && history[name.toLowerCase()].category) || '';
-  history[name.toLowerCase()]={weight:mainWeight, desc, sets:reps, date:new Date().toISOString().split('T')[0], category:existingCat};
+  history[name.toLowerCase()]={weight:mainWeight, desc, sets:reps, allSets:W.sets.map(s=>({weight:s.weight,reps:s.reps})), date:new Date().toISOString().split('T')[0], category:existingCat};
   SS('iron_history', history);
 
   // Update recent
@@ -1595,7 +1616,12 @@ function restoreProgramExerciseCard(){
   card.style.display='block';
   document.getElementById('exName').innerHTML = `<span style="color:var(--muted);font-size:12px;font-weight:600">${programIdx+1}/${total}</span> ${name}`;
 
-  let lastInfo = hasHistory ? `Last: ${h.desc} × ${h.sets.join(', ')} (${h.date})` : 'First time';
+  let lastInfo = 'First time';
+  if(hasHistory && h.allSets){
+    lastInfo = `Last: ${h.allSets.map(s=>s.weight+'×'+s.reps).join(', ')} (${h.date})`;
+  } else if(hasHistory){
+    lastInfo = `Last: ${h.desc} × ${h.sets.join(', ')} (${h.date})`;
+  }
   document.getElementById('exLast').innerHTML = `
     <div style="margin-bottom:6px">${lastInfo}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">
@@ -1607,9 +1633,11 @@ function restoreProgramExerciseCard(){
 
   restDuration = pgEx.rest;
 
-  // Rebuild set rows preserving logged state
+  // Rebuild set rows preserving logged state, smart pre-fill from per-set history
   const container = document.getElementById('setRows');
   container.innerHTML='';
+  const lastAllSets = hasHistory && h.allSets ? h.allSets : null;
+
   for(let i=0;i<W.targetSets;i++){
     const row = document.createElement('div');
     row.className = 'set-row';
@@ -1627,8 +1655,17 @@ function restoreProgramExerciseCard(){
         <button style="width:28px;height:28px;border-radius:6px;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center" onclick="deleteSet(${i})">×</button>`;
     } else {
       if(i === W.setIdx) row.classList.add('current');
-      const sugW = hasHistory ? h.weight : (W.sets.length>0 ? W.sets[W.sets.length-1].weight : '');
-      const sugR = hasHistory && h.sets[i] ? h.sets[i] : '';
+      let sugW = '';
+      let sugR = '';
+      if(lastAllSets && lastAllSets[i]){
+        sugW = lastAllSets[i].weight;
+        sugR = lastAllSets[i].reps;
+      } else if(lastAllSets && lastAllSets.length > 0){
+        sugW = lastAllSets[lastAllSets.length-1].weight;
+      } else if(hasHistory){
+        sugW = h.weight;
+        sugR = h.sets && h.sets[i] ? h.sets[i] : '';
+      }
       row.innerHTML=`
         <span class="set-label" id="sLbl${i}">Set ${i+1}</span>
         <input class="w-input" id="sW${i}" type="number" inputmode="decimal" placeholder="lbs" value="${sugW}" onfocus="this.select()">
