@@ -156,6 +156,45 @@ input{font-family:inherit;outline:none}
 /* Rest Timer — fixed position above bottom bar */
 .rest-bar{display:none;position:fixed;bottom:calc(62px + var(--safe-b));left:0;right:0;z-index:50;padding:10px 16px;background:var(--s1);border-top:1px solid var(--border);text-align:center}
 .rest-bar.show{display:block}
+
+/* Dashboard */
+.dash{padding:16px;padding-bottom:calc(80px + var(--safe-b));overflow-y:auto;-webkit-overflow-scrolling:touch}
+.dash-back{background:none;color:var(--dim);font-size:13px;font-weight:600;padding:0;margin-bottom:16px}
+.dash-back:active{color:var(--text)}
+.dash-title{font-size:18px;font-weight:800;color:var(--text);margin-bottom:16px}
+.dash-card{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:16px;margin-bottom:12px}
+.dash-card-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.dash-row{display:flex;gap:12px}
+.dash-row .dash-card{flex:1}
+.dash-stat{font-size:28px;font-weight:900;color:var(--text);line-height:1}
+.dash-stat-label{font-size:11px;color:var(--dim);margin-top:4px}
+.dash-delta{font-size:11px;font-weight:700;margin-top:4px}
+.dash-delta.up{color:var(--green)}
+.dash-delta.down{color:var(--red)}
+.dash-delta.flat{color:var(--dim)}
+.dash-empty{text-align:center;color:var(--dim);font-size:14px;padding:40px 16px}
+.dash-section{margin-top:20px}
+.dash-section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.dash-section-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.5px}
+.dash-add-btn{background:none;color:var(--red);font-size:12px;font-weight:700;padding:4px 10px;border:1px solid var(--red);border-radius:12px}
+.dash-add-btn:active{background:var(--red);color:#fff}
+.dash-ex-card{background:var(--s1);border:1px solid var(--border);border-radius:16px;padding:12px 14px;margin-bottom:8px}
+.dash-ex-name{font-size:13px;font-weight:700;color:var(--text)}
+.dash-ex-sub{font-size:11px;color:var(--dim);margin-top:2px}
+.lab-pill{display:inline-block;padding:6px 12px;border-radius:16px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600;margin:0 4px 6px 0}
+.lab-pill:active,.lab-pill.sel{border-color:var(--red);color:var(--text);background:var(--red-dark)}
+.lab-entry{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.lab-entry:last-child{border-bottom:none}
+.lab-val{font-size:16px;font-weight:800;color:var(--text)}
+.lab-unit{font-size:11px;color:var(--dim);margin-left:2px}
+.lab-date{font-size:11px;color:var(--muted)}
+.lab-del{background:none;color:var(--red);font-size:11px;font-weight:700;padding:2px 6px;border:1px solid var(--red);border-radius:8px;margin-left:8px}
+.dash-detail-back{background:none;color:var(--dim);font-size:13px;font-weight:600;padding:0;margin-bottom:12px}
+.dash-detail-back:active{color:var(--text)}
+/* View transitions */
+.dash{opacity:1;transition:opacity 0.15s ease}
+.dash-card{animation:dashFadeIn 0.2s ease both}
+@keyframes dashFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -163,6 +202,7 @@ input{font-family:inherit;outline:none}
 <div class="hdr">
   <h1>IRON</h1>
   <div class="rt">
+    <button style="background:none;color:var(--dim);font-size:12px;font-weight:600;padding:4px 8px;border:1px solid var(--border);border-radius:6px" onclick="showDashboard()">Stats</button>
     <button style="background:none;color:var(--dim);font-size:12px;font-weight:600;padding:4px 8px;border:1px solid var(--border);border-radius:6px" onclick="showHistory()">History</button>
     <span class="dot"></span><span id="timer">00:00</span>
   </div>
@@ -178,6 +218,9 @@ input{font-family:inherit;outline:none}
 
 <!-- Weekly Stats Banner -->
 <div class="week-stats" id="weekStats" style="display:none"></div>
+
+<!-- Dashboard View -->
+<div id="dashView" class="dash" style="display:none"></div>
 
 <!-- Workout Focus Selector -->
 <div id="planView" class="picker">
@@ -443,6 +486,7 @@ function showPlanView(){
   document.getElementById('pickerView').style.display='none';
   document.getElementById('exCard').style.display='none';
   document.getElementById('programOverview').style.display='none';
+  document.getElementById('dashView').style.display='none';
   document.getElementById('groupPrompt').classList.remove('show');
   currentFocus = null;
   programDay = null;
@@ -492,6 +536,16 @@ function showPlanView(){
 function startProgramDay(dayKey){
   const day = PROGRAM.schedule[dayKey];
   if(!day) return;
+
+  // Resume if there's an active workout for this same program day
+  if(W.active && W.programDay === dayKey){
+    programDay = W.programDay;
+    programIdx = W.programIdx || 0;
+    programQueue = day.exercises.map((e,i)=>({...e, idx:i}));
+    document.getElementById('planView').style.display='none';
+    restoreUI();
+    return;
+  }
 
   programDay = dayKey;
   programQueue = day.exercises.map((e,i)=>({...e, idx:i}));
@@ -859,7 +913,14 @@ async function goHome(){
     const ok = await showDialog('Go home? Your workout will be saved and you can resume later.', {okText:'Go Home', green:true});
     if(!ok) return;
   }
-  // Save current state so it can be resumed
+  // Finalize current exercise if it has logged sets (prevents silent corruption on next select)
+  if(W.cur && W.sets.length > 0){
+    finishExercise();
+  } else if(W.cur){
+    W.cur=null; W.sets=[]; W.setIdx=0;
+  }
+  // Preserve program state in W before showPlanView clears the in-memory vars
+  if(programDay){ W.programDay=programDay; W.programIdx=programIdx; }
   save();
   // Reset UI to plan view
   document.getElementById('exCard').style.display='none';
@@ -867,7 +928,7 @@ async function goHome(){
   document.getElementById('groupPrompt').classList.remove('show');
   clearRest();
   // If no exercises logged, fully discard
-  if(W.exercises.length === 0 && (!W.cur || W.sets.length === 0)){
+  if(W.exercises.length === 0){
     localStorage.removeItem('iron_active');
     W={active:false,start:null,exercises:[],cur:null,sets:[],setIdx:0,targetSets:3};
     programDay=null; programQueue=[]; programIdx=0;
@@ -1377,7 +1438,9 @@ function showSummary(){
     const prev=ex.prev;
     let badge='';
     if(prev && prev.sets){
-      const prevVol=prev.weight * prev.sets.reduce((a,r)=>a+r,0);
+      const prevVol=prev.allSets
+        ? prev.allSets.reduce((a,s)=>a+s.weight*s.reps,0)
+        : prev.weight * prev.sets.reduce((a,r)=>a+r,0);
       const curVol=ex.allSets.reduce((a,s)=>a+s.weight*s.reps,0);
       const wDiff=ex.weight-prev.weight;
       if(wDiff>0) badge=`<span style="color:var(--green);font-size:11px;font-weight:700"> ↑${wDiff}lbs</span>`;
@@ -1587,7 +1650,9 @@ async function shareToJoe(){
     const sStr = ex.allSets.map(s=>fmtSet(s)).join(', ');
     let poTag = '';
     if(ex.prev && ex.prev.sets){
-      const prevVol = ex.prev.weight * ex.prev.sets.reduce((a,r)=>a+r,0);
+      const prevVol = ex.prev.allSets
+        ? ex.prev.allSets.reduce((a,s)=>a+s.weight*s.reps,0)
+        : ex.prev.weight * ex.prev.sets.reduce((a,r)=>a+r,0);
       const curVol = ex.allSets.reduce((a,s)=>a+s.weight*s.reps,0);
       if(ex.weight > ex.prev.weight) poTag = ` [+${ex.weight-ex.prev.weight}lbs]`;
       else if(curVol > prevVol) poTag = ` [+${curVol-prevVol}vol]`;
@@ -1620,12 +1685,632 @@ async function shareToJoe(){
   }
 }
 
+// ===================== DASHBOARD =====================
+function showDashboard(){
+  document.getElementById('planView').style.display='none';
+  document.getElementById('pickerView').style.display='none';
+  document.getElementById('exCard').style.display='none';
+  document.getElementById('programOverview').style.display='none';
+  document.getElementById('groupPrompt').classList.remove('show');
+  const dv = document.getElementById('dashView');
+  dv.style.display='block';
+  renderDashCards();
+}
+
+function closeDashboard(){
+  document.getElementById('dashView').style.display='none';
+  if(W.active) restoreUI();
+  else showPlanView();
+}
+
+function getDashData(){
+  const completed = LS('iron_completed') || [];
+  if(completed.length === 0) return null;
+
+  // Build weekly buckets for last 8 weeks
+  const now = new Date();
+  const weeks = [];
+  for(let i=7; i>=0; i--){
+    const wStart = new Date(now);
+    wStart.setDate(wStart.getDate() - wStart.getDay() - i*7); // Sunday of that week
+    wStart.setHours(0,0,0,0);
+    const wEnd = new Date(wStart);
+    wEnd.setDate(wEnd.getDate() + 7);
+    weeks.push({start:wStart, end:wEnd, sessions:0, volume:0, sets:0, dur:0});
+  }
+
+  completed.forEach(w=>{
+    const d = new Date(w.date);
+    for(const wk of weeks){
+      if(d >= wk.start && d < wk.end){
+        wk.sessions++;
+        wk.volume += w.volume || 0;
+        wk.sets += (w.exercises||[]).reduce((a,e)=>(a+(e.allSets||e.sets||[]).length),0);
+        wk.dur += w.dur || 0;
+        break;
+      }
+    }
+  });
+
+  // Current week = last in array, previous = second to last
+  const thisWeek = weeks[weeks.length-1];
+  const lastWeek = weeks[weeks.length-2];
+
+  // Streak: consecutive weeks (from most recent backward) with at least 1 session
+  let streak = 0;
+  for(let i=weeks.length-1; i>=0; i--){
+    // Skip current week if it has 0 (week still in progress)
+    if(i === weeks.length-1 && weeks[i].sessions === 0) continue;
+    if(weeks[i].sessions > 0) streak++;
+    else break;
+  }
+
+  // All-time stats
+  const totalWorkouts = completed.length;
+  const totalVolume = completed.reduce((a,w)=>a+(w.volume||0),0);
+  const avgDur = Math.round(completed.reduce((a,w)=>a+(w.dur||0),0) / totalWorkouts);
+
+  return {weeks, thisWeek, lastWeek, streak, totalWorkouts, totalVolume, avgDur};
+}
+
+function deltaTag(cur, prev, unit, invert){
+  if(!prev || prev === 0) return '';
+  const diff = cur - prev;
+  if(diff === 0) return '<div class="dash-delta flat">— same as last week</div>';
+  const pct = Math.round(Math.abs(diff) / prev * 100);
+  const arrow = diff > 0 ? '↑' : '↓';
+  // For most metrics, up is good. invert flips it.
+  const isGood = invert ? diff < 0 : diff > 0;
+  const cls = isGood ? 'up' : (diff === 0 ? 'flat' : 'down');
+  return `<div class="dash-delta ${cls}">${arrow} ${pct}% ${unit ? unit+' ' : ''}vs last week</div>`;
+}
+
+function fmtVol(v){
+  if(v >= 1000) return Math.round(v/1000) + 'K';
+  return v.toString();
+}
+
+function svgBarChart(data, opts){
+  const w = opts.width || 280;
+  const h = opts.height || 120;
+  const color = opts.color || '#dc2626';
+  const barGap = 6;
+  const labelH = 18;
+  const topPad = 16;
+  const chartH = h - labelH - topPad;
+  const maxVal = Math.max(...data.map(d=>d.value), 1);
+  const barW = (w - (data.length+1)*barGap) / data.length;
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">`;
+
+  data.forEach((d, i)=>{
+    const x = barGap + i * (barW + barGap);
+    const barH = (d.value / maxVal) * chartH;
+    const y = topPad + chartH - barH;
+
+    // Bar background
+    svg += `<rect x="${x}" y="${topPad}" width="${barW}" height="${chartH}" rx="4" fill="#1c1c1c"/>`;
+    // Bar fill
+    if(d.value > 0){
+      svg += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="4" fill="${color}" opacity="0.85"/>`;
+      // Value label
+      svg += `<text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" fill="#999" font-size="9" font-weight="600" font-family="Inter,sans-serif">${opts.fmtVal ? opts.fmtVal(d.value) : d.value}</text>`;
+    }
+    // X-axis label
+    svg += `<text x="${x + barW/2}" y="${h - 2}" text-anchor="middle" fill="#666" font-size="9" font-family="Inter,sans-serif">${d.label}</text>`;
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+function renderDashCards(){
+  const dv = document.getElementById('dashView');
+  const data = getDashData();
+
+  if(!data){
+    dv.innerHTML = `
+      <button class="dash-back" onclick="closeDashboard()">← Back</button>
+      <div class="dash-title">Dashboard</div>
+      <div class="dash-empty">No workouts yet. Complete a workout to see your stats here.</div>`;
+    return;
+  }
+
+  const {weeks, thisWeek, lastWeek, streak, totalWorkouts, totalVolume, avgDur} = data;
+
+  // Week label formatter
+  const wLabel = (wk) => {
+    const m = wk.start.getMonth()+1;
+    const d = wk.start.getDate();
+    return m+'/'+d;
+  };
+
+  // Volume chart data
+  const volData = weeks.map(wk=>({label:wLabel(wk), value:wk.volume}));
+  const freqData = weeks.map(wk=>({label:wLabel(wk), value:wk.sessions}));
+
+  let html = `<button class="dash-back" onclick="closeDashboard()">← Back</button>`;
+  html += `<div class="dash-title">Dashboard</div>`;
+
+  // Row 1: Streak + This Week Sessions
+  html += `<div class="dash-row">`;
+  html += `<div class="dash-card">
+    <div class="dash-stat" style="color:var(--green)">${streak}</div>
+    <div class="dash-stat-label">week streak</div>
+  </div>`;
+  html += `<div class="dash-card">
+    <div class="dash-stat">${thisWeek.sessions}</div>
+    <div class="dash-stat-label">sessions this week</div>
+    ${deltaTag(thisWeek.sessions, lastWeek.sessions, '')}
+  </div>`;
+  html += `</div>`;
+
+  // Row 2: Volume + Duration this week
+  html += `<div class="dash-row">`;
+  html += `<div class="dash-card">
+    <div class="dash-stat">${fmtVol(thisWeek.volume)}</div>
+    <div class="dash-stat-label">lbs this week</div>
+    ${deltaTag(thisWeek.volume, lastWeek.volume, '')}
+  </div>`;
+  html += `<div class="dash-card">
+    <div class="dash-stat">${thisWeek.dur}</div>
+    <div class="dash-stat-label">min this week</div>
+    ${deltaTag(thisWeek.dur, lastWeek.dur, '')}
+  </div>`;
+  html += `</div>`;
+
+  // Volume trend chart
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Weekly Volume (lbs)</div>
+    ${svgBarChart(volData, {color:'#dc2626', fmtVal:fmtVol})}
+  </div>`;
+
+  // Frequency chart
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Sessions Per Week</div>
+    ${svgBarChart(freqData, {color:'#3b82f6'})}
+  </div>`;
+
+  // All-time stats
+  html += `<div class="dash-card">
+    <div class="dash-card-title">All Time</div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px">
+      <div><div class="dash-stat" style="font-size:20px">${totalWorkouts}</div><div class="dash-stat-label">workouts</div></div>
+      <div><div class="dash-stat" style="font-size:20px">${fmtVol(totalVolume)}</div><div class="dash-stat-label">total lbs</div></div>
+      <div><div class="dash-stat" style="font-size:20px">${avgDur}</div><div class="dash-stat-label">avg min</div></div>
+    </div>
+  </div>`;
+
+  dv.innerHTML = html;
+}
+
+// ===================== SVG LINE CHART =====================
+function svgLineChart(points, opts){
+  const w = opts.width || 280;
+  const h = opts.height || 100;
+  const color = opts.color || '#dc2626';
+  const padL = 36, padR = 10, padT = 12, padB = 20;
+  const cw = w - padL - padR;
+  const ch = h - padT - padB;
+
+  if(points.length < 2){
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">
+      <text x="${w/2}" y="${h/2}" text-anchor="middle" fill="#666" font-size="11" font-family="Inter,sans-serif">Need 2+ data points</text></svg>`;
+  }
+
+  const vals = points.map(p=>p.value);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const range = maxV - minV || 1;
+
+  const px = (i) => padL + (i / (points.length-1)) * cw;
+  const py = (v) => padT + ch - ((v - minV) / range) * ch;
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">`;
+
+  // Horizontal grid lines (3)
+  for(let i=0; i<=2; i++){
+    const yy = padT + (ch/2)*i;
+    const val = maxV - (range/2)*i;
+    svg += `<line x1="${padL}" y1="${yy}" x2="${w-padR}" y2="${yy}" stroke="#2a2a2a" stroke-width="0.5"/>`;
+    svg += `<text x="${padL-4}" y="${yy+3}" text-anchor="end" fill="#666" font-size="8" font-family="Inter,sans-serif">${opts.fmtVal ? opts.fmtVal(val) : Math.round(val)}</text>`;
+  }
+
+  // Area fill
+  const polyPts = points.map((p,i)=>`${px(i)},${py(p.value)}`).join(' ');
+  svg += `<polygon points="${px(0)},${padT+ch} ${polyPts} ${px(points.length-1)},${padT+ch}" fill="${color}" opacity="0.12"/>`;
+
+  // Line
+  svg += `<polyline points="${polyPts}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  // Dots + x-axis labels
+  points.forEach((p,i)=>{
+    svg += `<circle cx="${px(i)}" cy="${py(p.value)}" r="3.5" fill="${color}" stroke="#0a0a0a" stroke-width="1.5"/>`;
+    // Show first, last, and every other label to avoid crowding
+    if(i === 0 || i === points.length-1 || points.length <= 6 || i % Math.ceil(points.length/5) === 0){
+      svg += `<text x="${px(i)}" y="${h-3}" text-anchor="middle" fill="#666" font-size="8" font-family="Inter,sans-serif">${p.label}</text>`;
+    }
+  });
+
+  svg += '</svg>';
+  return svg;
+}
+
+// ===================== EXERCISE PROGRESSION =====================
+function getExerciseProgression(){
+  const completed = LS('iron_completed') || [];
+  if(completed.length === 0) return [];
+
+  // Count exercise frequency and collect data points
+  const exMap = {};
+  completed.forEach(w=>{
+    const d = new Date(w.date);
+    const dateStr = (d.getMonth()+1)+'/'+d.getDate();
+    (w.exercises||[]).forEach(ex=>{
+      const key = ex.name.toLowerCase();
+      if(!exMap[key]) exMap[key] = {name:ex.name, points:[], count:0};
+      exMap[key].count++;
+      // Max weight used in this session — handle legacy {weight, sets} and new {allSets} format
+      let maxW = (ex.allSets||[]).reduce((m,s)=>Math.max(m,s.weight||0),0);
+      if(maxW === 0 && ex.weight) maxW = ex.weight;
+      if(maxW > 0){
+        exMap[key].points.push({date:w.date, label:dateStr, value:maxW});
+      }
+    });
+  });
+
+  // Sort by frequency, take top 5 with 3+ data points
+  return Object.values(exMap)
+    .filter(e=>e.points.length >= 3)
+    .sort((a,b)=>b.count - a.count)
+    .slice(0,5)
+    .map(e=>{
+      // Sort points by date
+      e.points.sort((a,b)=>new Date(a.date)-new Date(b.date));
+      // PR
+      e.pr = Math.max(...e.points.map(p=>p.value));
+      return e;
+    });
+}
+
+function renderExProgressionSection(){
+  const exData = getExerciseProgression();
+  if(exData.length === 0) return '';
+
+  let html = `<div class="dash-section">
+    <div class="dash-section-hdr"><span class="dash-section-title">Top Lifts — Progression</span></div>`;
+
+  exData.forEach(ex=>{
+    const latest = ex.points[ex.points.length-1].value;
+    const first = ex.points[0].value;
+    const diff = latest - first;
+    const diffStr = diff > 0 ? `<span style="color:var(--green)">+${diff} lbs</span>` : diff < 0 ? `<span style="color:var(--red)">${diff} lbs</span>` : '<span style="color:var(--dim)">—</span>';
+
+    html += `<div class="dash-ex-card" onclick="showExDetail('${ex.name.replace(/'/g,"\\'")}')">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div class="dash-ex-name">${ex.name}</div>
+        <div style="font-size:11px">${diffStr}</div>
+      </div>
+      <div class="dash-ex-sub">PR: ${ex.pr} lbs · ${ex.points.length} sessions</div>
+      ${svgLineChart(ex.points, {color:'#dc2626', height:80})}
+    </div>`;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+// ===================== EXERCISE DETAIL VIEW =====================
+function showExDetail(exName){
+  const completed = LS('iron_completed') || [];
+  const key = exName.toLowerCase();
+  const sessions = [];
+
+  completed.forEach(w=>{
+    const d = new Date(w.date);
+    (w.exercises||[]).forEach(ex=>{
+      if(ex.name.toLowerCase() === key){
+        const sets = (ex.allSets||[]).length > 0
+          ? ex.allSets.map(s=>s.weight+'×'+s.reps).join(', ')
+          : (ex.sets||[]).map(r=>ex.weight+'×'+r).join(', ');
+        let maxW = (ex.allSets||[]).reduce((m,s)=>Math.max(m,s.weight||0),0);
+        if(maxW === 0 && ex.weight) maxW = ex.weight;
+        sessions.push({date:w.date, dateStr:d.toLocaleDateString(), sets, maxW});
+      }
+    });
+  });
+
+  sessions.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const pr = Math.max(...sessions.map(s=>s.maxW));
+  const points = sessions.map(s=>({date:s.date, label:(new Date(s.date).getMonth()+1)+'/'+(new Date(s.date).getDate()), value:s.maxW}));
+
+  const dv = document.getElementById('dashView');
+  let html = `<button class="dash-detail-back" onclick="renderDashCards()">← Dashboard</button>`;
+  html += `<div class="dash-title">${exName}</div>`;
+  html += `<div class="dash-card">
+    <div style="display:flex;justify-content:space-between">
+      <div><div class="dash-stat" style="font-size:22px">${pr}</div><div class="dash-stat-label">PR (lbs)</div></div>
+      <div><div class="dash-stat" style="font-size:22px">${sessions.length}</div><div class="dash-stat-label">sessions</div></div>
+    </div>
+  </div>`;
+
+  if(points.length >= 2){
+    html += `<div class="dash-card">
+      <div class="dash-card-title">Weight Over Time</div>
+      ${svgLineChart(points, {color:'#dc2626', height:130})}
+    </div>`;
+  }
+
+  html += `<div class="dash-card"><div class="dash-card-title">Session History</div>`;
+  sessions.slice().reverse().forEach(s=>{
+    const isPR = s.maxW === pr;
+    html += `<div class="lab-entry">
+      <div>
+        <div style="font-size:12px;color:var(--text);font-weight:600">${s.dateStr}${isPR ? ' <span style="color:var(--yellow);font-size:10px">★ PR</span>' : ''}</div>
+        <div style="font-size:11px;color:var(--dim)">${s.sets}</div>
+      </div>
+      <div class="lab-val">${s.maxW}<span class="lab-unit">lbs</span></div>
+    </div>`;
+  });
+  html += '</div>';
+
+  dv.innerHTML = html;
+}
+
+// ===================== LAB RESULTS =====================
+const BIOMARKERS = [
+  {name:'Testosterone', unit:'ng/dL', color:'#3b82f6'},
+  {name:'Free Testosterone', unit:'pg/mL', color:'#8b5cf6'},
+  {name:'A1C', unit:'%', color:'#f59e0b', invert:true},
+  {name:'Fasting Glucose', unit:'mg/dL', color:'#eab308', invert:true},
+  {name:'Total Cholesterol', unit:'mg/dL', color:'#ef4444', invert:true},
+  {name:'LDL', unit:'mg/dL', color:'#dc2626', invert:true},
+  {name:'HDL', unit:'mg/dL', color:'#22c55e'},
+  {name:'Triglycerides', unit:'mg/dL', color:'#f97316', invert:true},
+  {name:'CRP', unit:'mg/L', color:'#ec4899', invert:true},
+  {name:'TSH', unit:'mIU/L', color:'#14b8a6'},
+  {name:'Body Weight', unit:'lbs', color:'#6b7280'},
+  {name:'Body Fat', unit:'%', color:'#a855f7'}
+];
+
+function getLabs(){ return LS('iron_labs') || []; }
+function saveLabs(labs){ SS('iron_labs', labs); }
+
+function addLab(entry){
+  const labs = getLabs();
+  entry.id = 'lab_' + Date.now();
+  labs.push(entry);
+  if(labs.length > 500) labs.shift();
+  saveLabs(labs);
+}
+
+function deleteLab(id){
+  const labs = getLabs().filter(l=>l.id !== id);
+  saveLabs(labs);
+}
+
+function showLabForm(){
+  const today = new Date().toISOString().split('T')[0];
+  const dv = document.getElementById('dashView');
+
+  let html = `<button class="dash-detail-back" onclick="renderDashCards()">← Dashboard</button>`;
+  html += `<div class="dash-title">Add Lab Result</div>`;
+
+  // Date
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Date</div>
+    <input type="date" id="labDate" value="${today}" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit"/>
+  </div>`;
+
+  // Biomarker pills
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Biomarker</div>
+    <div style="margin-bottom:8px">`;
+  BIOMARKERS.forEach(b=>{
+    html += `<button class="lab-pill" onclick="selectBiomarker(this,'${b.name}','${b.unit}')">${b.name}</button>`;
+  });
+  html += `</div>
+    <input type="text" id="labMarker" placeholder="Or type custom biomarker..." style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
+  </div>`;
+
+  // Value + Unit
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Value</div>
+    <div style="display:flex;gap:8px">
+      <input type="number" id="labValue" placeholder="e.g. 485" inputmode="decimal" style="flex:2;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;font-weight:700;font-family:inherit" onfocus="this.select()"/>
+      <input type="text" id="labUnit" placeholder="unit" style="flex:1;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--dim);font-size:14px;font-family:inherit"/>
+    </div>
+  </div>`;
+
+  // Notes
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Notes (optional)</div>
+    <input type="text" id="labNotes" placeholder="e.g. fasting, 8am draw" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
+  </div>`;
+
+  // Save button
+  html += `<button onclick="submitLabForm()" style="width:100%;padding:14px;background:var(--red);color:#fff;font-size:15px;font-weight:800;border-radius:14px;border:none;font-family:inherit;margin-bottom:16px">Save Lab Result</button>`;
+
+  dv.innerHTML = html;
+}
+
+function selectBiomarker(el, name, unit){
+  document.getElementById('labMarker').value = name;
+  document.getElementById('labUnit').value = unit;
+  // Highlight selected pill
+  document.querySelectorAll('.lab-pill').forEach(p=>p.classList.remove('sel'));
+  el.classList.add('sel');
+  // Focus value field
+  document.getElementById('labValue').focus();
+}
+
+async function submitLabForm(){
+  const marker = document.getElementById('labMarker').value.trim();
+  const value = parseFloat(document.getElementById('labValue').value);
+  const unit = document.getElementById('labUnit').value.trim();
+  const date = document.getElementById('labDate').value;
+  const notes = document.getElementById('labNotes').value.trim();
+
+  if(!marker){ await showDialog('Enter a biomarker name.',{alert:true,okText:'OK'}); return; }
+  if(isNaN(value)){ await showDialog('Enter a numeric value.',{alert:true,okText:'OK'}); return; }
+
+  addLab({date, marker, value, unit, notes});
+  renderDashCards();
+}
+
+function renderLabSection(){
+  const labs = getLabs();
+
+  let html = `<div class="dash-section">
+    <div class="dash-section-hdr">
+      <span class="dash-section-title">Lab Results</span>
+      <button class="dash-add-btn" onclick="showLabForm()">+ Add</button>
+    </div>`;
+
+  if(labs.length === 0){
+    html += `<div class="dash-card"><div style="text-align:center;color:var(--dim);font-size:13px;padding:12px">No lab results yet. Tap + Add to log bloodwork.</div></div>`;
+    html += '</div>';
+    return html;
+  }
+
+  // Group by marker
+  const byMarker = {};
+  labs.forEach(l=>{
+    if(!byMarker[l.marker]) byMarker[l.marker] = [];
+    byMarker[l.marker].push(l);
+  });
+
+  // Sort each group by date
+  Object.values(byMarker).forEach(arr=>arr.sort((a,b)=>a.date.localeCompare(b.date)));
+
+  // Render a card per biomarker
+  Object.entries(byMarker).forEach(([marker, entries])=>{
+    const latest = entries[entries.length-1];
+    const bio = BIOMARKERS.find(b=>b.name === marker);
+    const color = bio ? bio.color : '#999';
+    const invert = bio ? bio.invert : false;
+
+    // Trend arrow
+    let trendHtml = '';
+    if(entries.length >= 2){
+      const prev = entries[entries.length-2].value;
+      const diff = latest.value - prev;
+      if(diff !== 0){
+        const arrow = diff > 0 ? '↑' : '↓';
+        const isGood = invert ? diff < 0 : diff > 0;
+        const cls = isGood ? 'up' : 'down';
+        trendHtml = `<span class="dash-delta ${cls}" style="display:inline;margin-left:6px">${arrow}${Math.abs(Math.round(diff*100)/100)}</span>`;
+      }
+    }
+
+    // Sparkline
+    let spark = '';
+    if(entries.length >= 2){
+      const pts = entries.map((e,i)=>({label:'', value:e.value}));
+      spark = svgLineChart(pts, {color, height:50, width:280});
+    }
+
+    html += `<div class="dash-ex-card" onclick="showLabDetail('${marker.replace(/'/g,"\\'")}')">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div class="dash-ex-name">${marker}</div>
+        <div><span class="lab-val">${latest.value}</span><span class="lab-unit">${latest.unit}</span>${trendHtml}</div>
+      </div>
+      <div class="dash-ex-sub">${latest.date} · ${entries.length} reading${entries.length>1?'s':''}</div>
+      ${spark}
+    </div>`;
+  });
+
+  html += '</div>';
+  return html;
+}
+
+// ===================== LAB DETAIL VIEW =====================
+function showLabDetail(marker){
+  const labs = getLabs().filter(l=>l.marker === marker).sort((a,b)=>a.date.localeCompare(b.date));
+  if(labs.length === 0){ renderDashCards(); return; }
+
+  const bio = BIOMARKERS.find(b=>b.name === marker);
+  const color = bio ? bio.color : '#999';
+  const invert = bio ? bio.invert : false;
+  const unit = labs[0].unit;
+  const latest = labs[labs.length-1];
+
+  const dv = document.getElementById('dashView');
+  let html = `<button class="dash-detail-back" onclick="renderDashCards()">← Dashboard</button>`;
+  html += `<div class="dash-title">${marker}</div>`;
+
+  // Summary card
+  const vals = labs.map(l=>l.value);
+  const hi = Math.max(...vals);
+  const lo = Math.min(...vals);
+  html += `<div class="dash-card">
+    <div style="display:flex;justify-content:space-between">
+      <div><div class="dash-stat" style="font-size:22px;color:${color}">${latest.value}</div><div class="dash-stat-label">latest (${unit})</div></div>
+      <div><div class="dash-stat" style="font-size:18px">${hi}</div><div class="dash-stat-label">high</div></div>
+      <div><div class="dash-stat" style="font-size:18px">${lo}</div><div class="dash-stat-label">low</div></div>
+    </div>
+  </div>`;
+
+  // Chart
+  if(labs.length >= 2){
+    const points = labs.map(l=>{
+      const d = new Date(l.date);
+      return {label:(d.getMonth()+1)+'/'+(d.getDate()), value:l.value, date:l.date};
+    });
+    html += `<div class="dash-card">
+      <div class="dash-card-title">Trend</div>
+      ${svgLineChart(points, {color, height:130})}
+    </div>`;
+  }
+
+  // All entries
+  html += `<div class="dash-card"><div class="dash-card-title">All Readings</div>`;
+  labs.slice().reverse().forEach(l=>{
+    html += `<div class="lab-entry">
+      <div>
+        <div style="font-size:12px;color:var(--text);font-weight:600">${l.date}</div>
+        ${l.notes ? `<div style="font-size:10px;color:var(--dim)">${l.notes}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center">
+        <span class="lab-val">${l.value}</span><span class="lab-unit">${l.unit}</span>
+        <button class="lab-del" onclick="event.stopPropagation();confirmDeleteLab('${l.id}','${marker.replace(/'/g,"\\'")}')">×</button>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+
+  dv.innerHTML = html;
+}
+
+async function confirmDeleteLab(id, marker){
+  const ok = await showDialog('Delete this lab reading?', {okText:'Delete'});
+  if(!ok) return;
+  deleteLab(id);
+  showLabDetail(marker);
+}
+
+// ===================== RENDER FULL DASHBOARD =====================
+// Override renderDashCards to include Phase 2+3 sections
+const _renderDashPhase1 = renderDashCards;
+renderDashCards = function(){
+  _renderDashPhase1();
+  const dv = document.getElementById('dashView');
+  const data = getDashData();
+  if(!data) return;
+
+  // Append exercise progression and lab sections
+  let extra = renderExProgressionSection();
+  extra += renderLabSection();
+  dv.innerHTML += extra;
+};
+
 // ===================== DATA EXPORT =====================
 function exportData(){
   const data={
     history: LS('iron_history')||{},
     recent: LS('iron_recent')||[],
-    completed: LS('iron_completed')||[]
+    completed: LS('iron_completed')||[],
+    labs: LS('iron_labs')||[]
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -1653,6 +2338,7 @@ function startTimer(){
 function restoreUI(){
   startTimer();
   document.getElementById('planView').style.display='none';
+  document.getElementById('dashView').style.display='none';
 
   // Restore program state if applicable
   if(W.programDay && PROGRAM.schedule[W.programDay]){
