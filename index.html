@@ -328,7 +328,11 @@ input{font-family:inherit;outline:none}
 // TODO: Replace placeholders below with your project values after Supabase setup.
 const SUPABASE_URL = 'https://emzwoofcnqjoodbbdhvw.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Pr7Di32pQ39vnv6kN3mZvA_pn57Vbgf';
-const supabase = window.supabase
+// Renamed from `supabase` to `sb` — the UMD bundle from the CDN sets
+// `window.supabase` as a global property, so `const supabase` would clash
+// with it and V8 throws "Identifier 'supabase' has already been declared",
+// which halts the entire <script> tag.
+const sb = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 
@@ -353,9 +357,9 @@ const supabase = window.supabase
 // shows "Synced as <name>" in header. Required before any Supabase INSERT into workout_sessions
 // (trainer_id and client_id are NOT NULL on that table).
 async function initClientSyncBadge(){
-  if(!window.IRON_TOKEN || !supabase) return;
+  if(!window.IRON_TOKEN || !sb) return;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('clients')
       .select('id, full_name, trainer_id')
       .eq('pwa_access_token', window.IRON_TOKEN)
@@ -940,13 +944,13 @@ function startWorkout(){
   // Dual-write: INSERT workout_sessions row (fire-and-forget, failsafe).
   // Requires IRON_CLIENT_ID + IRON_TRAINER_ID populated by initClientSyncBadge().
   (async function(){
-    if(!supabase || !window.IRON_TOKEN) return;
+    if(!sb || !window.IRON_TOKEN) return;
     if(!window.IRON_CLIENT_ID || !window.IRON_TRAINER_ID){
       console.warn('[Iron] workout_sessions INSERT skipped — client/trainer IDs not loaded yet');
       return;
     }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await sb
         .from('workout_sessions')
         .insert({
           trainer_id: window.IRON_TRAINER_ID,
@@ -1550,11 +1554,11 @@ function submitWorkout(){
 
   // Dual-write: UPDATE workout_sessions + INSERT exercise/set logs (fire-and-forget, failsafe)
   (async function(){
-    if(!supabase || !window.IRON_TOKEN) return;
+    if(!sb || !window.IRON_TOKEN) return;
     const sessionId = localStorage.getItem('iron_session_id');
     try {
       if(sessionId){
-        const { error: upErr } = await supabase
+        const { error: upErr } = await sb
           .from('workout_sessions')
           .update({
             status: 'completed',
