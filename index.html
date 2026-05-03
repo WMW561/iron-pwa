@@ -334,19 +334,19 @@ const supabase = window.supabase
 
 // ===================== CLIENT TOKEN (PWA access via ?token=) =====================
 (function initClientToken(){
-  const params = new URLSearchParams(window.location.search);
-  const t = params.get('token');
-  if(t){
-    window.IRON_TOKEN = t;
-    localStorage.setItem('iron_token', t);
-  } else {
-    const stored = localStorage.getItem('iron_token');
-    if(stored) window.IRON_TOKEN = stored;
-  }
-  if(window.IRON_TOKEN && supabase){
-    supabase.rest.headers['x-client-token'] = window.IRON_TOKEN;
-    supabase.rest.headers['x-app-client-token'] = window.IRON_TOKEN;
-  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('token');
+    if(t){
+      window.IRON_TOKEN = t;
+      localStorage.setItem('iron_token', t);
+    } else {
+      const stored = localStorage.getItem('iron_token');
+      if(stored) window.IRON_TOKEN = stored;
+    }
+    // Note: x-client-token header injection removed (broke on supabase-js v2 API).
+    // We use trainer_id + client_id (looked up via pwa_access_token) on inserts instead.
+  } catch(e){ console.warn('[Iron] initClientToken failed', e); }
 })();
 
 // Fetch client + trainer IDs by token. Sets window.IRON_CLIENT_ID, window.IRON_TRAINER_ID,
