@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Iron</title>
-<!-- Supabase JS UMD — required for multi-tenant dual-write (v0.2) -->
+<!-- Supabase JS UMD — kept for any future read-only public surfaces (v0.3 writes route through pwa-sync Edge Function) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
@@ -283,8 +283,7 @@ input{font-family:inherit;outline:none}
   <div class="modal">
     <h2>WORKOUT SUMMARY</h2>
     <div id="summaryBody"></div>
-    <button class="close" onclick="submitWorkout()">SAVE WORKOUT</button>
-    <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600;margin-top:8px" onclick="closeSummary()">Back to Edit</button>
+    <button class="close" onclick="closeSummary()">DONE</button>
     <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;margin-top:8px" onclick="exportData()">Export All Data (JSON)</button>
   </div>
 </div>
@@ -1045,7 +1044,7 @@ async function discardWorkout(){
 }
 
 let _endingWorkout = false; // flag to suppress program auto-advance during endWorkout
-function endWorkout(){
+async function endWorkout(){
   if(W.exercises.length===0 && (!W.cur || W.sets.length===0)){ showDialog('No exercises logged yet.',{alert:true,okText:'OK'}); return; }
   _endingWorkout = true;
   if(W.cur){
@@ -1058,7 +1057,16 @@ function endWorkout(){
     }
   }
   _endingWorkout = false;
-  showSummary();
+  // v0.3: single-tap finish + confirm. Replaces the old Finish→Modal→Save two-step.
+  const exCount = W.exercises.length;
+  const setCount = W.exercises.reduce((s,e)=>s+(e.allSets||[]).length,0);
+  const ok = await showDialog(
+    `Save and end workout?\n${exCount} exercise${exCount===1?'':'s'}, ${setCount} set${setCount===1?'':'s'}.`,
+    {okText:'Save', cancelText:'Keep going', green:true}
+  );
+  if(!ok) return;
+  showSummary();      // populate the summary modal (reads from W, must run before W is cleared)
+  submitWorkout();    // persist locally, sync to portal, clear W. Modal stays open as read-only confirmation.
 }
 
 function save(){ SS('iron_active', W) }
@@ -1566,12 +1574,10 @@ function submitWorkout(){
     } catch(e){ console.warn('[Iron] complete_session failed', e); }
   })();
 
-  // shareToJoe() removed from auto-submit in v0.3 — workouts sync via pwa-sync Edge Function
-  // to the trainer portal, which is now the system of record. Function still defined below
-  // for future "Share summary" button surfacing.
+  // v0.3: portal sync above is the system of record. Summary modal stays open until user taps DONE.
+  // (Was: shareToJoe() + auto-close modal — both removed.)
 
-  // Clear everything
-  document.getElementById('summaryModal').classList.remove('show');
+  // Clear workout state (modal remains visible as read-only saved-confirmation)
   W={active:false,start:null,exercises:[],cur:null,sets:[],setIdx:0,targetSets:3};
   programDay=null; programQueue=[]; programIdx=0;
   document.getElementById('logView').innerHTML='';
@@ -1720,64 +1726,9 @@ function showHistory(){
   document.getElementById('historyModal').classList.add('show');
 }
 
-// ===================== SHARE TO JOE =====================
-async function shareToJoe(){
-  const startDate = W.start instanceof Date ? W.start : new Date(W.start);
-  const dur=Math.floor((new Date()-startDate)/60000);
-  const totalVol=calcVolume(W.exercises);
-  const totalSets=W.exercises.reduce((s,e)=>s+e.sets.length,0);
-  const date=new Date().toISOString().split('T')[0];
-  const day=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
-
-  // Program info
-  const pgDay = W.programDay && PROGRAM.schedule[W.programDay] ? PROGRAM.schedule[W.programDay] : null;
-  const pgLabel = pgDay ? `${pgDay.label} — ${pgDay.sub}` : 'Free Workout';
-
-  // Structured format for Joe auto-parsing
-  let body = `IRON WORKOUT: ${date} (${day})\n`;
-  body += `Program: ${pgLabel}\n`;
-  body += `Duration: ${dur} min | Exercises: ${W.exercises.length} | Sets: ${totalSets} | Volume: ${totalVol.toLocaleString()} lbs\n`;
-  body += `---\n`;
-
-  W.exercises.forEach((ex,i)=>{
-    // Exercise line: name | set details | progressive overload
-    const sStr = ex.allSets.map(s=>fmtSet(s)).join(', ');
-    let poTag = '';
-    if(ex.prev && ex.prev.sets){
-      const prevVol = ex.prev.allSets
-        ? ex.prev.allSets.reduce((a,s)=>a+s.weight*s.reps,0)
-        : ex.prev.weight * ex.prev.sets.reduce((a,r)=>a+r,0);
-      const curVol = ex.allSets.reduce((a,s)=>a+s.weight*s.reps,0);
-      if(ex.weight > ex.prev.weight) poTag = ` [+${ex.weight-ex.prev.weight}lbs]`;
-      else if(curVol > prevVol) poTag = ` [+${curVol-prevVol}vol]`;
-      else if(curVol === prevVol) poTag = ' [=]';
-    } else {
-      poTag = ' [NEW]';
-    }
-    body += `${i+1}. ${ex.name}: ${sStr}${poTag}\n`;
-  });
-
-  body += `---\n`;
-  body += `Iron PWA | ${PROGRAM.name}`;
-
-  // Email subject for auto-parsing
-  const subject = `IRON: ${pgLabel} — ${date}`;
-
-  // Web Share API (iOS Safari, Android)
-  if(navigator.share){
-    try{
-      await navigator.share({title: subject, text: body});
-      return;
-    }catch(e){} // user cancelled or not supported
-  }
-  // Clipboard fallback
-  try{
-    await navigator.clipboard.writeText(body);
-    showDialog('Workout copied to clipboard! Paste it to Joe.',{alert:true,okText:'Got it',green:true});
-  }catch(e){
-    showDialog(body,{alert:true,okText:'OK'});
-  }
-}
+// shareToJoe() removed in v0.3. Workouts now sync to the trainer portal via pwa-sync
+// Edge Function; the iOS share-sheet path is gone. If a "Share summary" button is needed
+// later, build it cleanly against the portal API rather than restoring this code.
 
 // ===================== DASHBOARD =====================
 function showDashboard(){
@@ -2592,7 +2543,7 @@ document.addEventListener('touchstart', function initAudio(){
 // ===================== SERVICE WORKER =====================
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
-// ===================== SUPABASE CLIENT BADGE (v0.2) =====================
+// ===================== SUPABASE CLIENT BADGE (v0.3) =====================
 initClientSyncBadge();
 </script>
 </body>
