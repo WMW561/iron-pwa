@@ -1566,8 +1566,9 @@ function submitWorkout(){
     } catch(e){ console.warn('[Iron] complete_session failed', e); }
   })();
 
-  // Email to Joe
-  shareToJoe();
+  // shareToJoe() removed from auto-submit in v0.3 — workouts sync via pwa-sync Edge Function
+  // to the trainer portal, which is now the system of record. Function still defined below
+  // for future "Share summary" button surfacing.
 
   // Clear everything
   document.getElementById('summaryModal').classList.remove('show');
