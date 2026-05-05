@@ -324,17 +324,31 @@ input{font-family:inherit;outline:none}
 </div>
 
 <script>
-// ===================== SUPABASE INIT (v0.2 multi-tenant) =====================
-// TODO: Replace placeholders below with your project values after Supabase setup.
+// ===================== SUPABASE / PWA-SYNC INIT (v0.3 Edge Function) =====================
+// v0.3 routes all writes through the pwa-sync Edge Function (service_role server-side).
+// supabase-js anon client kept around for any future read-only public surfaces only.
 const SUPABASE_URL = 'https://emzwoofcnqjoodbbdhvw.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Pr7Di32pQ39vnv6kN3mZvA_pn57Vbgf';
-// Renamed from `supabase` to `sb` — the UMD bundle from the CDN sets
-// `window.supabase` as a global property, so `const supabase` would clash
-// with it and V8 throws "Identifier 'supabase' has already been declared",
-// which halts the entire <script> tag.
+const PWA_SYNC_URL = SUPABASE_URL + '/functions/v1/pwa-sync';
 const sb = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
+
+// Single client → server call. Throws on transport failure; returns parsed JSON otherwise.
+async function pwaSync(action, payload){
+  if(!window.IRON_TOKEN) throw new Error('no_token');
+  const res = await fetch(PWA_SYNC_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+    },
+    body: JSON.stringify({ token: window.IRON_TOKEN, action, payload })
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || ('http_' + res.status));
+  return data;
+}
 
 // ===================== CLIENT TOKEN (PWA access via ?token=) =====================
 (function initClientToken(){
@@ -353,24 +367,19 @@ const sb = window.supabase
   } catch(e){ console.warn('[Iron] initClientToken failed', e); }
 })();
 
-// Fetch client + trainer IDs by token. Sets window.IRON_CLIENT_ID, window.IRON_TRAINER_ID,
-// shows "Synced as <name>" in header. Required before any Supabase INSERT into workout_sessions
-// (trainer_id and client_id are NOT NULL on that table).
+// Resolve the PWA access token via Edge Function. Sets IRON_CLIENT_ID, IRON_TRAINER_ID,
+// IRON_BRAND, and renders "Synced as <name>" badge in header.
 async function initClientSyncBadge(){
-  if(!window.IRON_TOKEN || !sb) return;
+  if(!window.IRON_TOKEN) return;
   try {
-    const { data, error } = await sb
-      .from('clients')
-      .select('id, full_name, trainer_id')
-      .eq('pwa_access_token', window.IRON_TOKEN)
-      .single();
-    if(error || !data) return;
-    window.IRON_CLIENT_ID = data.id;
+    const data = await pwaSync('resolve_token');
+    window.IRON_CLIENT_ID = data.client_id;
     window.IRON_TRAINER_ID = data.trainer_id;
+    window.IRON_BRAND = data.brand || null;
     const badge = document.createElement('span');
     badge.id = 'syncBadge';
     badge.style.cssText = 'font-size:11px;color:var(--green);font-weight:600;white-space:nowrap';
-    badge.textContent = 'Synced as ' + data.full_name;
+    badge.textContent = 'Synced as ' + data.client_name;
     const rt = document.querySelector('.hdr .rt');
     if(rt) rt.insertBefore(badge, rt.firstChild);
   } catch(e){ console.warn('[Iron] syncBadge fetch failed', e); }
@@ -941,29 +950,16 @@ function startWorkout(){
   W.active=true; W.start=new Date(); W.exercises=[]; W.cur=null; W.sets=[]; W.setIdx=0;
   save(); startTimer();
   updateBottomBar();
-  // Dual-write: INSERT workout_sessions row (fire-and-forget, failsafe).
-  // Requires IRON_CLIENT_ID + IRON_TRAINER_ID populated by initClientSyncBadge().
+  // Edge Function write: start_session. Fire-and-forget, failsafe.
   (async function(){
-    if(!sb || !window.IRON_TOKEN) return;
-    if(!window.IRON_CLIENT_ID || !window.IRON_TRAINER_ID){
-      console.warn('[Iron] workout_sessions INSERT skipped — client/trainer IDs not loaded yet');
-      return;
-    }
+    if(!window.IRON_TOKEN) return;
     try {
-      const { data, error } = await sb
-        .from('workout_sessions')
-        .insert({
-          trainer_id: window.IRON_TRAINER_ID,
-          client_id: window.IRON_CLIENT_ID,
-          started_at: W.start.toISOString(),
-          status: 'in_progress',
-          is_free_workout: true
-        })
-        .select('id')
-        .single();
-      if(error){ console.warn('[Iron] workout_sessions INSERT failed', error); return; }
-      if(data && data.id) localStorage.setItem('iron_session_id', data.id);
-    } catch(e){ console.warn('[Iron] workout_sessions INSERT error', e); }
+      const data = await pwaSync('start_session', {
+        is_free_workout: true,
+        started_at: W.start.toISOString()
+      });
+      if(data && data.session_id) localStorage.setItem('iron_session_id', data.session_id);
+    } catch(e){ console.warn('[Iron] start_session failed', e); }
   })();
 }
 
@@ -1552,30 +1548,22 @@ function submitWorkout(){
   SS('iron_completed',done);
   localStorage.removeItem('iron_active');
 
-  // Dual-write: UPDATE workout_sessions + INSERT exercise/set logs (fire-and-forget, failsafe)
+  // Edge Function write: complete_session. Fire-and-forget, failsafe.
+  // exercise/set logs are deferred — session-level totals are enough for trainer MVP.
   (async function(){
-    if(!sb || !window.IRON_TOKEN) return;
+    if(!window.IRON_TOKEN) return;
     const sessionId = localStorage.getItem('iron_session_id');
+    if(!sessionId) return;
     try {
-      if(sessionId){
-        const { error: upErr } = await sb
-          .from('workout_sessions')
-          .update({
-            status: 'completed',
-            completed_at: new Date().toISOString(),
-            duration_sec: dur * 60,
-            total_sets: totalSets,
-            total_volume_lbs: totalVol
-          })
-          .eq('id', sessionId);
-        if(upErr) console.warn('[Iron] workout_sessions UPDATE failed', upErr);
-      }
-      // exercise_id UUID NOT NULL in schema — name→UUID mapping is week-2 scope.
-      // In v0.2 dogfood we skip workout_exercise_logs / set_logs writes.
-      // Session-level data (status, volume, sets) is sufficient for the trainer portal MVP.
-      // TODO v0.3: resolve exercise names to UUIDs via exercises table lookup, then write logs.
+      await pwaSync('complete_session', {
+        session_id: sessionId,
+        completed_at: new Date().toISOString(),
+        duration_sec: dur * 60,
+        total_sets: totalSets,
+        total_volume_lbs: totalVol
+      });
       localStorage.removeItem('iron_session_id');
-    } catch(e){ console.warn('[Iron] submitWorkout Supabase sync error', e); }
+    } catch(e){ console.warn('[Iron] complete_session failed', e); }
   })();
 
   // Email to Joe
