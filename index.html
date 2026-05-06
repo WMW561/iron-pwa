@@ -34,6 +34,16 @@ input{font-family:inherit;outline:none}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
+/* Brand logo in header */
+.hdr-logo{max-height:28px;width:auto;display:block;border-radius:4px}
+
+/* Sync queue status pill */
+.sync-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;border:1px solid transparent;white-space:nowrap}
+.sync-pill.ok{color:var(--green);border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.08)}
+.sync-pill.pending{color:var(--yellow);border-color:rgba(234,179,8,.3);background:rgba(234,179,8,.08)}
+.sync-pill.error{color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)}
+.sync-pill-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+
 /* Recovery */
 .recov{display:none;padding:10px 16px;background:var(--s1);border-bottom:1px solid var(--border);font-size:12px;color:var(--dim);justify-content:space-between}
 .recov.show{display:flex}
@@ -334,7 +344,113 @@ const sb = window.supabase
   : null;
 
 // Single client → server call. Throws on transport failure; returns parsed JSON otherwise.
-async function pwaSync(action, payload){
+// ===================== SYNC QUEUE (offline-tolerant) =====================
+// Queue entry: { id, action, payload, attempts, ts }
+// All pwa-sync writes (start_session, complete_session) go through enqueueSync.
+// resolve_token is read-only and bypasses the queue.
+
+const SYNC_QUEUE_KEY = 'iron_sync_queue';
+let _flushInProgress = false;
+
+function _loadQueue(){ try{ return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)) || []; }catch(e){ return []; } }
+function _saveQueue(q){ localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)); }
+
+function _syncPillEl(){
+  let el = document.getElementById('syncPill');
+  if(!el){
+    el = document.createElement('span');
+    el.id = 'syncPill';
+    el.className = 'sync-pill ok';
+    el.innerHTML = '<span class="sync-pill-dot"></span><span id="syncPillText">Synced</span>';
+    const rt = document.querySelector('.hdr .rt');
+    if(rt) rt.insertBefore(el, rt.firstChild);
+  }
+  return el;
+}
+
+function updateSyncPill(){
+  const q = _loadQueue();
+  const pill = _syncPillEl();
+  const txt = document.getElementById('syncPillText');
+  const hasError = q.some(e => e.attempts >= 3);
+  if(q.length === 0){
+    pill.className = 'sync-pill ok';
+    if(txt) txt.textContent = 'Synced';
+  } else if(hasError){
+    pill.className = 'sync-pill error';
+    if(txt) txt.textContent = q.length + ' failed';
+  } else {
+    pill.className = 'sync-pill pending';
+    if(txt) txt.textContent = q.length + ' pending';
+  }
+}
+
+async function flushQueue(){
+  if(_flushInProgress || !window.IRON_TOKEN) return;
+  _flushInProgress = true;
+  try {
+    const q = _loadQueue();
+    if(q.length === 0){ return; }
+    // Process in insertion order; stop on first failure.
+    // Skip complete_session entries that are still waiting on a start_session to drain.
+    for(let i = 0; i < q.length; i++){
+      const entry = q[i];
+      if(entry._awaitingSessionId) break; // can't proceed without the real session_id
+      try {
+        const result = await _rawPwaSync(entry.action, entry.payload);
+        // On start_session success, patch any pending complete_session with the real session_id
+        if(entry.action === 'start_session' && result && result.session_id){
+          localStorage.setItem('iron_session_id', result.session_id);
+          // Update queued complete_session entries that used a placeholder id
+          for(let j = i+1; j < q.length; j++){
+            if(q[j].action === 'complete_session' && q[j]._awaitingSessionId === entry.id){
+              q[j].payload.session_id = result.session_id;
+              delete q[j]._awaitingSessionId;
+            }
+          }
+        }
+        // On complete_session success, clean up the session id
+        if(entry.action === 'complete_session'){
+          localStorage.removeItem('iron_session_id');
+        }
+        q.splice(i, 1);
+        i--;
+        _saveQueue(q);
+      } catch(e){
+        q[i].attempts = (q[i].attempts || 0) + 1;
+        _saveQueue(q);
+        console.warn('[Iron] flushQueue: action=' + entry.action + ' attempt=' + q[i].attempts, e);
+        break; // stop on first failure
+      }
+    }
+  } finally {
+    _flushInProgress = false;
+    updateSyncPill();
+  }
+}
+
+function enqueueSync(action, payload){
+  const q = _loadQueue();
+  const entry = {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    action,
+    payload: payload || {},
+    attempts: 0,
+    ts: new Date().toISOString()
+  };
+  // If queueing a complete_session and its start_session is still pending, mark the dependency
+  if(action === 'complete_session'){
+    const pendingStart = q.find(e => e.action === 'start_session');
+    if(pendingStart) entry._awaitingSessionId = pendingStart.id;
+  }
+  q.push(entry);
+  _saveQueue(q);
+  updateSyncPill();
+  return entry.id;
+}
+
+// Raw network call (no queue logic) — used by flushQueue and resolve_token
+async function _rawPwaSync(action, payload){
   if(!window.IRON_TOKEN) throw new Error('no_token');
   const res = await fetch(PWA_SYNC_URL, {
     method: 'POST',
@@ -348,6 +464,23 @@ async function pwaSync(action, payload){
   if(!res.ok) throw new Error(data.error || ('http_' + res.status));
   return data;
 }
+
+// Public pwaSync: resolve_token bypasses queue (read-only); writes go through queue
+async function pwaSync(action, payload){
+  if(action === 'resolve_token'){
+    return _rawPwaSync(action, payload);
+  }
+  // Enqueue and immediately attempt flush
+  enqueueSync(action, payload);
+  await flushQueue();
+  // Return a minimal stub so callers that check data.session_id still work
+  // (start_session callers read iron_session_id from localStorage after flush)
+  return {};
+}
+
+// Replay triggers
+window.addEventListener('online', () => flushQueue());
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') flushQueue(); });
 
 // ===================== CLIENT TOKEN (PWA access via ?token=) =====================
 (function initClientToken(){
@@ -366,8 +499,29 @@ async function pwaSync(action, payload){
   } catch(e){ console.warn('[Iron] initClientToken failed', e); }
 })();
 
+// Apply trainer brand to the header. Called after resolve_token sets window.IRON_BRAND.
+function applyBrand(){
+  const brand = window.IRON_BRAND;
+  const h1 = document.querySelector('.hdr h1');
+
+  if(brand && brand.brand_color){
+    document.documentElement.style.setProperty('--red', brand.brand_color);
+  }
+
+  if(brand && brand.brand_logo_url && h1){
+    const img = document.createElement('img');
+    img.src = brand.brand_logo_url;
+    img.alt = brand.brand_name || 'IRON';
+    img.className = 'hdr-logo';
+    h1.replaceWith(img);
+  } else if(brand && brand.brand_name && h1){
+    h1.textContent = brand.brand_name;
+  }
+  // No brand data: defaults remain ("IRON" text + existing --red)
+}
+
 // Resolve the PWA access token via Edge Function. Sets IRON_CLIENT_ID, IRON_TRAINER_ID,
-// IRON_BRAND, and renders "Synced as <name>" badge in header.
+// IRON_BRAND, renders "Synced as <name>" badge, and applies trainer brand.
 async function initClientSyncBadge(){
   if(!window.IRON_TOKEN) return;
   try {
@@ -375,6 +529,7 @@ async function initClientSyncBadge(){
     window.IRON_CLIENT_ID = data.client_id;
     window.IRON_TRAINER_ID = data.trainer_id;
     window.IRON_BRAND = data.brand || null;
+    applyBrand();
     const badge = document.createElement('span');
     badge.id = 'syncBadge';
     badge.style.cssText = 'font-size:11px;color:var(--green);font-weight:600;white-space:nowrap';
@@ -1556,23 +1711,22 @@ function submitWorkout(){
   SS('iron_completed',done);
   localStorage.removeItem('iron_active');
 
-  // Edge Function write: complete_session. Fire-and-forget, failsafe.
+  // Edge Function write: complete_session — queued for offline-tolerant sync.
   // exercise/set logs are deferred — session-level totals are enough for trainer MVP.
-  (async function(){
-    if(!window.IRON_TOKEN) return;
+  // iron_session_id cleanup is handled inside flushQueue on confirmed success.
+  if(window.IRON_TOKEN){
     const sessionId = localStorage.getItem('iron_session_id');
-    if(!sessionId) return;
-    try {
-      await pwaSync('complete_session', {
-        session_id: sessionId,
-        completed_at: new Date().toISOString(),
-        duration_sec: dur * 60,
-        total_sets: totalSets,
-        total_volume_lbs: totalVol
-      });
-      localStorage.removeItem('iron_session_id');
-    } catch(e){ console.warn('[Iron] complete_session failed', e); }
-  })();
+    // If sessionId is missing, a pending start_session may still be queued;
+    // enqueueSync attaches _awaitingSessionId so flushQueue holds this entry
+    // until the start_session drains and provides the real id.
+    pwaSync('complete_session', {
+      session_id: sessionId || null,
+      completed_at: new Date().toISOString(),
+      duration_sec: dur * 60,
+      total_sets: totalSets,
+      total_volume_lbs: totalVol
+    }).catch(e => console.warn('[Iron] complete_session enqueue failed', e));
+  }
 
   // v0.3: portal sync above is the system of record. Summary modal stays open until user taps DONE.
   // (Was: shareToJoe() + auto-close modal — both removed.)
@@ -2544,7 +2698,9 @@ document.addEventListener('touchstart', function initAudio(){
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 // ===================== SUPABASE CLIENT BADGE (v0.3) =====================
-initClientSyncBadge();
+// Init sync pill with current queue state on load, then flush any queued items.
+updateSyncPill();
+initClientSyncBadge().then(() => flushQueue());
 </script>
 </body>
 </html>
