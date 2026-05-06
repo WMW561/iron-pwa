@@ -2919,7 +2919,8 @@ renderDashCards = function(){
         _renderDashPhase1();
         let e2 = '';
         const d2 = getDashData();
-        if(d2){ e2 += renderExProgressionSection(); e2 += renderLabSection(); }
+        if(d2){ e2 += renderExProgressionSection(); }
+        e2 += renderLabSection();
         e2 += renderProteinSection();
         dv2.innerHTML += e2;
       }
