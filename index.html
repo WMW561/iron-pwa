@@ -11,11 +11,27 @@
 <title>Iron</title>
 <!-- Supabase JS UMD — kept for any future read-only public surfaces (v0.3 writes route through pwa-sync Edge Function) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Brand pivot 2026-05-06: Plus Jakarta Sans (display) + DM Sans (body) — Google Fonts, zero licensing cost -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+/* Brand pivot 2026-05-06: Plus Jakarta Sans (display) + DM Sans (body) replace Inter.
+   Google Fonts loaded via <link> tags in <head> (preconnect + stylesheet). */
+/* TODO(rename): --red should be renamed --accent or --brand-primary in a future cleanup pass.
+   It is intentionally kept as --red here to minimize blast radius during the 2026-05-06 brand pivot.
+   applyBrand() writes to --red at runtime for per-trainer overrides — rename must update both CSS
+   and the applyBrand() JS call simultaneously. */
+/* CONTRAST NOTE: --red (now #1C5F72) used as text color on dark bg (#0a0a0a) in .hdr h1 yields
+   ~1.2:1 contrast ratio — fails WCAG AA. The wordmark is the primary affected element. Recommended
+   fix (deferred, design decision): either render "IRON" wordmark in #fff on the dark header, or
+   lighten the house-default text variant to #5BBDD1 (~4.5:1 on dark). Per-trainer overrides via
+   applyBrand() may also produce low-contrast results depending on trainer brand color — not engineered
+   to clamp; limitation documented here. */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
-  --red:#dc2626;--red-glow:rgba(220,38,38,.25);--red-dark:#991b1b;
+  /* Brand pivot 2026-05-06: deep teal-slate replaces red. Variable name kept for override compat. */
+  --red:#1C5F72;--red-glow:rgba(28,95,114,.25);--red-dark:#154d5e;
   --bg:#0a0a0a;--s1:#141414;--s2:#1c1c1c;--s3:#242424;
   --border:#2a2a2a;--border-light:#333;
   --text:#f5f5f5;--dim:#999;--muted:#666;
@@ -23,13 +39,18 @@
   --yellow:#eab308;--blue:#3b82f6;
   --safe-b:env(safe-area-inset-bottom)
 }
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding-bottom:calc(80px + var(--safe-b));overflow-x:hidden}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding-bottom:calc(80px + var(--safe-b));overflow-x:hidden}
 button{font-family:inherit;cursor:pointer;border:none;outline:none}
 input{font-family:inherit;outline:none}
+h1,h2,h3{font-family:'Plus Jakarta Sans',sans-serif}
+h1{font-weight:800}
+h2{font-weight:700}
+h3{font-weight:700}
 
 /* Header */
 .hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)}
-.hdr h1{font-size:22px;font-weight:900;color:var(--red);letter-spacing:-.5px}
+/* Wordmark uses warm off-white per brand spec (Brittany 2026-05-06): teal-slate fails AA contrast on dark bg */
+.hdr h1{font-size:22px;font-weight:800;color:#fafafa;letter-spacing:-.5px;font-family:'Plus Jakarta Sans',sans-serif}
 .hdr .rt{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--dim)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -2018,10 +2039,10 @@ function svgBarChart(data, opts){
     if(d.value > 0){
       svg += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="4" fill="${color}" opacity="0.85"/>`;
       // Value label
-      svg += `<text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" fill="#999" font-size="9" font-weight="600" font-family="Inter,sans-serif">${opts.fmtVal ? opts.fmtVal(d.value) : d.value}</text>`;
+      svg += `<text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" fill="#999" font-size="9" font-weight="600" font-family="DM Sans,sans-serif">${opts.fmtVal ? opts.fmtVal(d.value) : d.value}</text>`;
     }
     // X-axis label
-    svg += `<text x="${x + barW/2}" y="${h - 2}" text-anchor="middle" fill="#666" font-size="9" font-family="Inter,sans-serif">${d.label}</text>`;
+    svg += `<text x="${x + barW/2}" y="${h - 2}" text-anchor="middle" fill="#666" font-size="9" font-family="DM Sans,sans-serif">${d.label}</text>`;
   });
 
   svg += '</svg>';
@@ -2119,7 +2140,7 @@ function svgLineChart(points, opts){
 
   if(points.length < 2){
     return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">
-      <text x="${w/2}" y="${h/2}" text-anchor="middle" fill="#666" font-size="11" font-family="Inter,sans-serif">Need 2+ data points</text></svg>`;
+      <text x="${w/2}" y="${h/2}" text-anchor="middle" fill="#666" font-size="11" font-family="DM Sans,sans-serif">Need 2+ data points</text></svg>`;
   }
 
   const vals = points.map(p=>p.value);
@@ -2137,7 +2158,7 @@ function svgLineChart(points, opts){
     const yy = padT + (ch/2)*i;
     const val = maxV - (range/2)*i;
     svg += `<line x1="${padL}" y1="${yy}" x2="${w-padR}" y2="${yy}" stroke="#2a2a2a" stroke-width="0.5"/>`;
-    svg += `<text x="${padL-4}" y="${yy+3}" text-anchor="end" fill="#666" font-size="8" font-family="Inter,sans-serif">${opts.fmtVal ? opts.fmtVal(val) : Math.round(val)}</text>`;
+    svg += `<text x="${padL-4}" y="${yy+3}" text-anchor="end" fill="#666" font-size="8" font-family="DM Sans,sans-serif">${opts.fmtVal ? opts.fmtVal(val) : Math.round(val)}</text>`;
   }
 
   // Area fill
@@ -2152,7 +2173,7 @@ function svgLineChart(points, opts){
     svg += `<circle cx="${px(i)}" cy="${py(p.value)}" r="3.5" fill="${color}" stroke="#0a0a0a" stroke-width="1.5"/>`;
     // Show first, last, and every other label to avoid crowding
     if(i === 0 || i === points.length-1 || points.length <= 6 || i % Math.ceil(points.length/5) === 0){
-      svg += `<text x="${px(i)}" y="${h-3}" text-anchor="middle" fill="#666" font-size="8" font-family="Inter,sans-serif">${p.label}</text>`;
+      svg += `<text x="${px(i)}" y="${h-3}" text-anchor="middle" fill="#666" font-size="8" font-family="DM Sans,sans-serif">${p.label}</text>`;
     }
   });
 
