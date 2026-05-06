@@ -294,6 +294,8 @@ input{font-family:inherit;outline:none}
     <h2>WORKOUT SUMMARY</h2>
     <div id="summaryBody"></div>
     <button class="close" onclick="closeSummary()">DONE</button>
+    <!-- Stopgap trainer contact: opens native mail composer. v0.4 TODO: replace with in-app messages table + Edge Function action + portal inbox. -->
+    <button id="msgTrainerBtn" style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--dim);font-size:12px;font-weight:600;margin-top:8px" onclick="messageTrainer()">Message your trainer</button>
     <button style="width:100%;height:40px;border-radius:10px;background:var(--s2);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;margin-top:8px" onclick="exportData()">Export All Data (JSON)</button>
   </div>
 </div>
@@ -530,6 +532,7 @@ async function initClientSyncBadge(){
     window.IRON_TRAINER_ID = data.trainer_id;
     window.IRON_BRAND = data.brand || null;
     applyBrand();
+    initMsgTrainerBtn();
     const badge = document.createElement('span');
     badge.id = 'syncBadge';
     badge.style.cssText = 'font-size:11px;color:var(--green);font-weight:600;white-space:nowrap';
@@ -1747,6 +1750,28 @@ function closeSummary(){
   document.getElementById('summaryModal').classList.remove('show');
 }
 
+function messageTrainer(){
+  // Stopgap: open device native mail composer pre-addressed to trainer.
+  // v0.4 TODO: replace with in-app messaging (messages table + Edge Function + portal inbox).
+  const email = window.IRON_BRAND && window.IRON_BRAND.trainer_email;
+  if(!email){
+    console.warn('[Iron] messageTrainer: trainer_email not available on window.IRON_BRAND');
+    return;
+  }
+  window.location.href = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent('Question from your client');
+}
+
+function initMsgTrainerBtn(){
+  const btn = document.getElementById('msgTrainerBtn');
+  if(!btn) return;
+  const email = window.IRON_BRAND && window.IRON_BRAND.trainer_email;
+  if(!email){
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    btn.title = 'Trainer email not available';
+  }
+}
+
 // ===================== EDIT & DELETE =====================
 let editIdx = -1;
 
@@ -2364,6 +2389,10 @@ function renderLabSection(){
     <div class="dash-section-hdr">
       <span class="dash-section-title">Lab Results</span>
       <button class="dash-add-btn" onclick="showLabForm()">+ Add</button>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.35);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12px;color:#d97706;line-height:1.45">
+      <span style="flex-shrink:0;font-size:14px">&#9888;</span>
+      <span>Self-reported only. This data is not reviewed by your trainer or any clinician. Share lab values directly with your physician &mdash; don&rsquo;t rely on this view for medical decisions.</span>
     </div>`;
 
   if(labs.length === 0){
