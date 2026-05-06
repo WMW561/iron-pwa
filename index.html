@@ -2306,6 +2306,16 @@ function addLab(entry){
   labs.push(entry);
   if(labs.length > 500) labs.shift();
   saveLabs(labs);
+  // v0.4: bodyweight is the input to protein-target computation server-side.
+  // When the user logs Body Weight locally, push it up so get_protein_today
+  // returns a fresh target on the next dashboard render.
+  if(entry.marker === 'Body Weight' && !isNaN(entry.value) && window.IRON_TOKEN){
+    enqueueSync('set_current_weight', {
+      weight_lbs: Number(entry.value),
+      logged_at: new Date(entry.date || Date.now()).toISOString()
+    });
+    flushQueue();
+  }
 }
 
 function deleteLab(id){
@@ -2517,19 +2527,363 @@ async function confirmDeleteLab(id, marker){
   showLabDetail(marker);
 }
 
+// ===================== PROTEIN TRACKING (v0.4) =====================
+// Owner-only feature for advanced lifters: per-meal protein logging,
+// bodyweight-coupled target (default 1.0 g/lb), 7-day mini-chart, settings.
+// Server: pwa-sync actions log_protein / delete_protein / get_protein_today /
+//         set_protein_coefficient / set_current_weight.
+// Sync: routes through enqueueSync — same offline-tolerant queue as workouts.
+// Idempotency: every log_protein carries a client_log_id so flushQueue replays
+//              don't double-insert.
+
+const PROTEIN_LOCAL_KEY     = 'iron_protein_local';   // optimistic / offline cache of today's logs
+const PROTEIN_TODAY_KEY     = 'iron_protein_today';   // server snapshot from get_protein_today
+const PROTEIN_HISTORY_KEY   = 'iron_protein_history'; // last 7 days of totals (for mini-chart)
+const PROTEIN_COEF_KEY      = 'iron_protein_coef';    // local copy of coefficient, mirrors server
+const PROTEIN_OVERRIDE_KEY  = 'iron_protein_override';// local copy of override grams (or null)
+
+const MEAL_LABELS = ['breakfast','lunch','dinner','snack','pre-workout','post-workout','other'];
+
+function getProteinLocal(){ return LS(PROTEIN_LOCAL_KEY) || []; }
+function saveProteinLocal(arr){ SS(PROTEIN_LOCAL_KEY, arr); }
+function getProteinSnapshot(){ return LS(PROTEIN_TODAY_KEY) || null; }
+function saveProteinSnapshot(s){ SS(PROTEIN_TODAY_KEY, s); }
+function getProteinHistory(){ return LS(PROTEIN_HISTORY_KEY) || []; }
+function saveProteinHistory(h){ SS(PROTEIN_HISTORY_KEY, h); }
+
+function getProteinCoef(){
+  const v = LS(PROTEIN_COEF_KEY);
+  return (typeof v === 'number' && v >= 0.5 && v <= 2.0) ? v : 1.0;
+}
+function getProteinOverride(){
+  const v = LS(PROTEIN_OVERRIDE_KEY);
+  return (typeof v === 'number' && v > 0) ? v : null;
+}
+
+// Compute target locally as a fallback (offline / before first server response).
+function computeLocalTarget(){
+  const ovr = getProteinOverride();
+  if(ovr != null) return ovr;
+  const labs = getLabs().filter(l => l.marker === 'Body Weight');
+  if(labs.length === 0) return null;
+  labs.sort((a,b) => a.date.localeCompare(b.date));
+  const w = Number(labs[labs.length-1].value);
+  if(!w) return null;
+  return Math.round(w * getProteinCoef());
+}
+
+// Today's combined view: server logs (authoritative IDs) merged with optimistic
+// local entries that haven't been confirmed yet (matched by client_log_id).
+function getProteinTodayCombined(){
+  const snap = getProteinSnapshot();
+  const serverLogs = (snap && snap.logs) ? snap.logs.slice() : [];
+  const serverIds = new Set(serverLogs.map(l => l.client_log_id).filter(Boolean));
+  const local = getProteinLocal().filter(l => !serverIds.has(l.client_log_id));
+  const merged = serverLogs.concat(local);
+  merged.sort((a,b) => (a.logged_at || '').localeCompare(b.logged_at || ''));
+  const total = merged.reduce((s, r) => s + Number(r.grams || 0), 0);
+  const target = (snap && snap.target_grams != null) ? snap.target_grams : computeLocalTarget();
+  return { logs: merged, total_grams: total, target_grams: target };
+}
+
+async function refreshProteinToday(){
+  if(!window.IRON_TOKEN) return;
+  try {
+    const data = await _rawPwaSync('get_protein_today', {});
+    saveProteinSnapshot(data);
+    // Drop any optimistic local entries that the server now reports back.
+    const serverIds = new Set((data.logs || []).map(l => l.client_log_id).filter(Boolean));
+    const remaining = getProteinLocal().filter(l => !serverIds.has(l.client_log_id));
+    saveProteinLocal(remaining);
+    // Append today's total to the rolling 7-day history (today's row is replaced each call).
+    const todayKey = new Date().toISOString().slice(0,10);
+    const hist = getProteinHistory().filter(h => h.date !== todayKey);
+    hist.push({date: todayKey, total: data.total_grams || 0, target: data.target_grams || 0});
+    while(hist.length > 7) hist.shift();
+    saveProteinHistory(hist);
+  } catch(e){
+    console.warn('[Iron] refreshProteinToday failed', e);
+  }
+}
+
+function showProteinModal(){
+  const today = new Date();
+  const hh = String(today.getHours()).padStart(2,'0');
+  const mm = String(today.getMinutes()).padStart(2,'0');
+  let html = `<div class="dash-card">
+    <div class="dash-card-title">Grams</div>
+    <input type="number" id="proteinGrams" inputmode="decimal" placeholder="e.g. 40" style="width:100%;padding:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:18px;font-weight:700;font-family:inherit;box-sizing:border-box" onfocus="this.select()"/>
+  </div>`;
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Meal (optional)</div>
+    <div style="margin-bottom:8px">`;
+  MEAL_LABELS.forEach(m => {
+    html += `<button class="lab-pill" onclick="selectMealLabel(this,'${m}')">${m}</button>`;
+  });
+  html += `</div>
+    <input type="text" id="proteinMeal" placeholder="Or type custom..." style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
+  </div>`;
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Time</div>
+    <input type="time" id="proteinTime" value="${hh}:${mm}" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box"/>
+  </div>`;
+  html += `<div style="display:flex;gap:8px">
+    <button onclick="renderDashCards()" style="flex:1;padding:14px;background:var(--s2);color:var(--dim);font-size:14px;font-weight:700;border-radius:14px;border:1px solid var(--border);font-family:inherit">Cancel</button>
+    <button onclick="submitProteinForm()" style="flex:2;padding:14px;background:var(--red);color:#fff;font-size:15px;font-weight:800;border-radius:14px;border:none;font-family:inherit">Log Protein</button>
+  </div>`;
+  const dv = document.getElementById('dashView');
+  dv.innerHTML = `<button class="dash-detail-back" onclick="renderDashCards()">← Dashboard</button>
+    <div class="dash-title">Add Protein</div>` + html;
+  setTimeout(() => document.getElementById('proteinGrams').focus(), 50);
+}
+
+function selectMealLabel(el, label){
+  document.getElementById('proteinMeal').value = label;
+  document.querySelectorAll('.lab-pill').forEach(p => p.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+async function submitProteinForm(){
+  const grams = parseFloat(document.getElementById('proteinGrams').value);
+  const meal  = document.getElementById('proteinMeal').value.trim();
+  const time  = document.getElementById('proteinTime').value;
+  if(isNaN(grams) || grams <= 0){
+    await showDialog('Enter grams of protein.', {alert:true, okText:'OK'}); return;
+  }
+  // Build logged_at from today + chosen time
+  let loggedAt = new Date();
+  if(time){
+    const [h, m] = time.split(':').map(Number);
+    loggedAt.setHours(h, m, 0, 0);
+  }
+  const client_log_id = 'cl_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  // Optimistic local entry — gets cleared on next refreshProteinToday once server echoes it back.
+  const localEntry = {
+    id: client_log_id,                   // temporary id for delete affordance pre-sync
+    client_log_id,
+    grams,
+    meal_label: meal || null,
+    logged_at: loggedAt.toISOString(),
+    _pending: true
+  };
+  const arr = getProteinLocal();
+  arr.push(localEntry);
+  saveProteinLocal(arr);
+
+  enqueueSync('log_protein', {
+    grams,
+    meal_label: meal || null,
+    logged_at: loggedAt.toISOString(),
+    client_log_id
+  });
+  await flushQueue();
+  await refreshProteinToday();
+  renderDashCards();
+}
+
+async function deleteProteinLog(logId, clientLogId, isPending){
+  const ok = await showDialog('Delete this protein log?', {okText:'Delete', cancelText:'Cancel'});
+  if(!ok) return;
+  if(isPending){
+    // Pure local entry — never made it to server. Drop locally.
+    saveProteinLocal(getProteinLocal().filter(l => l.client_log_id !== clientLogId));
+  } else {
+    enqueueSync('delete_protein', {log_id: logId});
+    await flushQueue();
+  }
+  await refreshProteinToday();
+  renderDashCards();
+}
+
+function showProteinSettings(){
+  const coef = getProteinCoef();
+  const ovr  = getProteinOverride();
+  const dv = document.getElementById('dashView');
+  let html = `<button class="dash-detail-back" onclick="renderDashCards()">← Dashboard</button>
+    <div class="dash-title">Protein Target</div>`;
+  html += `<div class="dash-card">
+    <div class="dash-card-title">Mode</div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text);margin-bottom:8px">
+      <input type="radio" name="pmode" value="coef" ${ovr==null?'checked':''} onchange="toggleProteinMode('coef')"/>
+      <span>Bodyweight × coefficient</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text)">
+      <input type="radio" name="pmode" value="ovr" ${ovr!=null?'checked':''} onchange="toggleProteinMode('ovr')"/>
+      <span>Manual target (grams/day)</span>
+    </label>
+  </div>`;
+  // Coefficient slider
+  html += `<div class="dash-card" id="coefCard" style="${ovr!=null?'display:none':''}">
+    <div class="dash-card-title">Coefficient: <span id="coefVal" style="color:var(--red)">${coef.toFixed(1)} g/lb</span></div>
+    <input type="range" id="coefSlider" min="0.7" max="1.5" step="0.1" value="${coef}" style="width:100%" oninput="document.getElementById('coefVal').textContent=parseFloat(this.value).toFixed(1)+' g/lb'"/>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px">
+      <span>0.7 (cut)</span><span>1.0 (advanced)</span><span>1.5 (max)</span>
+    </div>
+  </div>`;
+  // Manual override input
+  html += `<div class="dash-card" id="ovrCard" style="${ovr==null?'display:none':''}">
+    <div class="dash-card-title">Daily target (grams)</div>
+    <input type="number" id="ovrInput" value="${ovr||''}" placeholder="e.g. 240" inputmode="decimal" style="width:100%;padding:12px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:18px;font-weight:700;font-family:inherit;box-sizing:border-box"/>
+  </div>`;
+  html += `<button onclick="saveProteinSettings()" style="width:100%;padding:14px;background:var(--red);color:#fff;font-size:15px;font-weight:800;border-radius:14px;border:none;font-family:inherit;margin-bottom:16px">Save</button>`;
+  dv.innerHTML = html;
+}
+
+function toggleProteinMode(mode){
+  document.getElementById('coefCard').style.display = (mode === 'coef') ? '' : 'none';
+  document.getElementById('ovrCard').style.display  = (mode === 'ovr')  ? '' : 'none';
+}
+
+async function saveProteinSettings(){
+  const mode = document.querySelector('input[name="pmode"]:checked').value;
+  if(mode === 'coef'){
+    const c = parseFloat(document.getElementById('coefSlider').value);
+    SS(PROTEIN_COEF_KEY, c);
+    SS(PROTEIN_OVERRIDE_KEY, null);
+    enqueueSync('set_protein_coefficient', {coefficient: c, override_grams: null});
+  } else {
+    const g = parseFloat(document.getElementById('ovrInput').value);
+    if(isNaN(g) || g <= 0){
+      await showDialog('Enter a daily protein target in grams.', {alert:true, okText:'OK'}); return;
+    }
+    SS(PROTEIN_OVERRIDE_KEY, g);
+    enqueueSync('set_protein_coefficient', {override_grams: g});
+  }
+  await flushQueue();
+  await refreshProteinToday();
+  renderDashCards();
+}
+
+function fmtTime(iso){
+  const d = new Date(iso);
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2,'0');
+  const ap = h >= 12 ? 'p' : 'a';
+  h = h % 12; if(h === 0) h = 12;
+  return h + ':' + m + ap;
+}
+
+function renderProteinSection(){
+  const {logs, total_grams, target_grams} = getProteinTodayCombined();
+  const hasTarget = target_grams != null && target_grams > 0;
+  const pct = hasTarget ? Math.min(100, Math.round((total_grams / target_grams) * 100)) : 0;
+
+  let html = `<div class="dash-section">
+    <div class="dash-section-hdr">
+      <span class="dash-section-title">Protein</span>
+      <div style="display:flex;gap:6px">
+        <button class="dash-add-btn" onclick="showProteinSettings()" aria-label="Settings" style="padding:4px 8px">⚙</button>
+        <button class="dash-add-btn" onclick="showProteinModal()">+ Add</button>
+      </div>
+    </div>`;
+
+  // Today summary card
+  html += `<div class="dash-card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <div>
+        <span style="font-size:24px;font-weight:900;color:var(--text)">${Math.round(total_grams)}g</span>
+        <span style="font-size:13px;color:var(--dim);margin-left:4px">${hasTarget ? '/ '+Math.round(target_grams)+'g target' : '— set a target in ⚙'}</span>
+      </div>
+      ${hasTarget ? `<div style="font-size:13px;color:${pct>=90?'var(--green)':'var(--dim)'};font-weight:700">${pct}%</div>` : ''}
+    </div>`;
+  if(hasTarget){
+    html += `<div style="height:8px;background:var(--s2);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:var(--red);transition:width 0.3s ease"></div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Today's log list
+  if(logs.length === 0){
+    html += `<div class="dash-card"><div style="text-align:center;color:var(--dim);font-size:13px;padding:8px">No meals logged today.</div></div>`;
+  } else {
+    html += `<div class="dash-card">`;
+    logs.forEach(l => {
+      const lbl = l.meal_label ? l.meal_label : 'meal';
+      const pending = l._pending ? ' <span style="font-size:10px;color:var(--muted)">(syncing)</span>' : '';
+      html += `<div class="lab-entry">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);text-transform:capitalize">${escapeHtml(lbl)}${pending}</div>
+          <div class="lab-date">${fmtTime(l.logged_at)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="lab-val">${Math.round(l.grams)}g</span>
+          <button class="lab-del" onclick="deleteProteinLog('${l.id||''}','${l.client_log_id||''}',${!!l._pending})">Delete</button>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 7-day mini chart (CSS bars, no library)
+  const hist = getProteinHistory();
+  if(hist.length >= 2){
+    const max = Math.max(...hist.map(h => Math.max(h.total||0, h.target||0)), 1);
+    html += `<div class="dash-card">
+      <div class="dash-card-title">Last 7 days</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-top:8px">`;
+    hist.forEach(h => {
+      const totalH = (h.total / max) * 70;
+      const targetH = h.target ? (h.target / max) * 70 : 0;
+      const day = new Date(h.date);
+      const dl = ['S','M','T','W','T','F','S'][day.getDay()];
+      const hit = h.target && h.total >= h.target * 0.9;
+      html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+        <div style="width:100%;height:70px;display:flex;align-items:flex-end;position:relative">
+          <div style="width:100%;height:${totalH}px;background:${hit?'var(--green)':'var(--red)'};border-radius:2px 2px 0 0"></div>
+          ${targetH ? `<div style="position:absolute;bottom:${targetH}px;left:0;right:0;height:1px;background:var(--dim);opacity:.6"></div>` : ''}
+        </div>
+        <div style="font-size:9px;color:var(--muted)">${dl}</div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+// Minimal HTML escape used by protein meal labels (free text).
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+
 // ===================== RENDER FULL DASHBOARD =====================
-// Override renderDashCards to include Phase 2+3 sections
+// Override renderDashCards to include Phase 2+3 sections + Protein (v0.4)
 const _renderDashPhase1 = renderDashCards;
 renderDashCards = function(){
   _renderDashPhase1();
   const dv = document.getElementById('dashView');
   const data = getDashData();
-  if(!data) return;
 
-  // Append exercise progression and lab sections
-  let extra = renderExProgressionSection();
-  extra += renderLabSection();
+  // Protein section renders even when there are no workouts yet (different data path)
+  let extra = '';
+  if(data){
+    extra += renderExProgressionSection();
+    extra += renderLabSection();
+  }
+  extra += renderProteinSection();
   dv.innerHTML += extra;
+
+  // Refresh server snapshot on every dashboard open (fire-and-forget, then re-render once).
+  if(window.IRON_TOKEN){
+    refreshProteinToday().then(() => {
+      // Only re-render if the dashboard is still showing
+      const dv2 = document.getElementById('dashView');
+      if(dv2 && dv2.style.display !== 'none'){
+        // Avoid render storm: only re-render the protein chunk if totals changed.
+        // Cheap check: re-render unconditionally (small DOM, infrequent trigger).
+        _renderDashPhase1();
+        let e2 = '';
+        const d2 = getDashData();
+        if(d2){ e2 += renderExProgressionSection(); e2 += renderLabSection(); }
+        e2 += renderProteinSection();
+        dv2.innerHTML += e2;
+      }
+    });
+  }
 };
 
 // ===================== DATA EXPORT =====================
