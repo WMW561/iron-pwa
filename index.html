@@ -48,11 +48,19 @@ h2{font-weight:700}
 h3{font-weight:700}
 
 /* Header */
-.hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)}
+.hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);overflow-x:auto}
 /* Wordmark uses warm off-white per brand spec (Brittany 2026-05-06): teal-slate fails AA contrast on dark bg */
-.hdr h1{font-size:22px;font-weight:800;color:#fafafa;letter-spacing:-.5px;font-family:'Plus Jakarta Sans',sans-serif}
-.hdr .rt{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--dim)}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+.hdr h1{font-size:22px;font-weight:800;color:#fafafa;letter-spacing:-.5px;font-family:'Plus Jakarta Sans',sans-serif;flex-shrink:0}
+.hdr .rt{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--dim);flex-wrap:wrap;min-width:0}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
+@media(max-width:480px){
+  .hdr{padding:12px 8px;gap:8px}
+  .hdr h1{font-size:18px}
+  .hdr .rt{gap:8px;font-size:12px}
+  #navProtein,#navProtein+button{padding:4px 6px;font-size:11px}
+  .sync-pill{padding:1px 5px;font-size:10px}
+  #syncBadge{font-size:11px}
+}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* Brand logo in header */
