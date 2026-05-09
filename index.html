@@ -1753,19 +1753,32 @@ function submitWorkout(){
   localStorage.removeItem('iron_active');
 
   // Edge Function write: complete_session — queued for offline-tolerant sync.
-  // exercise/set logs are deferred — session-level totals are enough for trainer MVP.
+  // v0.4: includes per-exercise and per-set details for physician reports.
   // iron_session_id cleanup is handled inside flushQueue on confirmed success.
   if(window.IRON_TOKEN){
     const sessionId = localStorage.getItem('iron_session_id');
     // If sessionId is missing, a pending start_session may still be queued;
     // enqueueSync attaches _awaitingSessionId so flushQueue holds this entry
     // until the start_session drains and provides the real id.
+
+    // Format exercises for Edge Function (name + sets with weight/reps)
+    const exercises = W.exercises.map(ex => ({
+      name: ex.name,
+      weight: ex.weight || 0,
+      sets: (ex.allSets || []).map(s => ({
+        weight: s.weight || 0,
+        reps: s.reps || 0,
+        set_type: s.set_type || 'working'
+      }))
+    }));
+
     pwaSync('complete_session', {
       session_id: sessionId || null,
       completed_at: new Date().toISOString(),
       duration_sec: dur * 60,
       total_sets: totalSets,
-      total_volume_lbs: totalVol
+      total_volume_lbs: totalVol,
+      exercises: exercises
     }).catch(e => console.warn('[Iron] complete_session enqueue failed', e));
   }
 
