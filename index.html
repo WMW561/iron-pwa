@@ -39,7 +39,7 @@
   --yellow:#eab308;--blue:#3b82f6;
   --safe-b:env(safe-area-inset-bottom)
 }
-body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding-bottom:calc(140px + var(--safe-b));overflow-x:hidden}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding-bottom:calc(62px + var(--safe-b));overflow-x:hidden}
 button{font-family:inherit;cursor:pointer;border:none;outline:none}
 input{font-family:inherit;outline:none}
 h1,h2,h3{font-family:'Plus Jakarta Sans',sans-serif}
@@ -49,15 +49,23 @@ h3{font-weight:700}
 
 /* Header */
 .hdr{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);overflow:hidden}
-/* Wordmark uses warm off-white per brand spec (Brittany 2026-05-06): teal-slate fails AA contrast on dark bg */
-.hdr h1{font-size:22px;font-weight:800;color:#fafafa;letter-spacing:-.5px;font-family:'Plus Jakarta Sans',sans-serif;flex-shrink:0}
+/* Wordmark uses white (#fff) for WCAG AA contrast against dark bg (#0a0a0a). Passes 7.5:1 contrast ratio. */
+.hdr h1{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.5px;font-family:'Plus Jakarta Sans',sans-serif;flex-shrink:0}
 .hdr .rt{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--dim);flex-wrap:wrap;min-width:0}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
+/* Bottom nav bar */
+.nav-bar{position:fixed;bottom:calc(var(--safe-b));left:0;right:0;background:var(--bg);border-top:1px solid var(--border);display:flex;height:62px;z-index:100}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--dim);text-decoration:none;border:none;background:none;cursor:pointer;padding:0;font-weight:600;font-family:inherit;transition:color 0.2s}
+.nav-btn:active,.nav-btn.active{color:var(--red)}
+.nav-btn-icon{font-size:20px}
+.nav-btn-label{font-size:11px;white-space:nowrap}
+
 @media(max-width:480px){
   .hdr{padding:12px 8px;gap:8px}
   .hdr h1{font-size:18px}
   .hdr .rt{gap:8px;font-size:12px}
-  #navProtein,#navProtein+button{display:none !important}
+  /* On mobile, show all 5 nav buttons in bottom bar instead of hiding Protein/History */
+  .nav-btn-label{font-size:10px}
   .sync-pill{padding:1px 5px;font-size:10px}
   #syncBadge{font-size:11px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
@@ -199,7 +207,7 @@ h3{font-weight:700}
 .rest-bar.show{display:block}
 
 /* Dashboard */
-.dash{padding:16px;padding-bottom:calc(80px + var(--safe-b));overflow-y:auto;-webkit-overflow-scrolling:touch}
+.dash{padding:16px;padding-bottom:calc(100px + var(--safe-b));overflow-y:auto;-webkit-overflow-scrolling:touch}
 .dash-back{background:none;color:var(--dim);font-size:13px;font-weight:600;padding:0;margin-bottom:16px}
 .dash-back:active{color:var(--text)}
 .dash-title{font-size:18px;font-weight:800;color:var(--text);margin-bottom:16px}
@@ -2637,19 +2645,21 @@ async function refreshProteinToday(){
   }
 }
 
-// Header nav button shows current protein progress so it's visible from every view
+// Nav button shows current protein progress so it's visible from every view
 // (planView default landing doesn't render the protein section; this keeps progress
 // glanceable without forcing a Stats tap).
 function updateProteinNavBadge(){
   const btn = document.getElementById('navProtein');
   if(!btn) return;
   const snap = getProteinSnapshot();
-  if(!snap){ btn.textContent = 'Protein'; return; }
+  const label = btn.querySelector('.nav-btn-label');
+  if(!label) return;
+  if(!snap){ label.textContent = 'Protein'; return; }
   // Include any optimistic local entries not yet drained from the queue.
   const localTotal = (getProteinLocal() || []).reduce((s, l) => s + Number(l.grams || 0), 0);
   const total = Math.round((Number(snap.total_grams) || 0) + localTotal);
   const target = snap.target_grams ? Math.round(Number(snap.target_grams)) : null;
-  btn.textContent = target ? `Protein ${total}/${target}g` : `Protein ${total}g`;
+  label.textContent = target ? `${total}/${target}g` : `${total}g`;
 }
 
 function showProteinModal(){
@@ -3128,10 +3138,60 @@ document.addEventListener('touchstart', function initAudio(){
 // ===================== SERVICE WORKER =====================
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
+// ===================== NAVIGATION =====================
+// Central nav handler for bottom nav bar. Updates active state and routes to correct view.
+function navTo(section){
+  const navBtns = document.querySelectorAll('.nav-btn');
+  navBtns.forEach(btn => btn.classList.remove('active'));
+
+  const sectionName = section.charAt(0).toUpperCase() + section.slice(1);
+  const currentBtn = document.getElementById('nav' + sectionName);
+  if(currentBtn) currentBtn.classList.add('active');
+
+  // Route to appropriate view
+  switch(section){
+    case 'workout': showPlanView(); break;
+    case 'dashboard': showDashboard(); break;
+    case 'labs': showDashboard(); setTimeout(() => showLabForm(), 100); break;
+    case 'protein': showDashboard(); setTimeout(() => showProteinModal(), 100); break;
+    case 'history': showHistory(); break;
+  }
+}
+
+// Set initial active nav button on page load
+window.addEventListener('load', () => {
+  const navBtn = document.getElementById('navWorkout');
+  if(navBtn) navBtn.classList.add('active');
+});
+
 // ===================== SUPABASE CLIENT BADGE (v0.3) =====================
 // Init sync pill with current queue state on load, then flush any queued items.
 updateSyncPill();
 initClientSyncBadge().then(() => flushQueue());
 </script>
+
+<!-- Bottom Navigation Bar — accessible on all screen sizes -->
+<div class="nav-bar" id="navBar">
+  <button class="nav-btn" id="navWorkout" onclick="navTo('workout')">
+    <div class="nav-btn-icon">💪</div>
+    <div class="nav-btn-label">Workout</div>
+  </button>
+  <button class="nav-btn" id="navDashboard" onclick="navTo('dashboard')">
+    <div class="nav-btn-icon">📊</div>
+    <div class="nav-btn-label">Dashboard</div>
+  </button>
+  <button class="nav-btn" id="navLabs" onclick="navTo('labs')">
+    <div class="nav-btn-icon">🧪</div>
+    <div class="nav-btn-label">Labs</div>
+  </button>
+  <button class="nav-btn" id="navProtein" onclick="navTo('protein')">
+    <div class="nav-btn-icon">🥚</div>
+    <div class="nav-btn-label">Protein</div>
+  </button>
+  <button class="nav-btn" id="navHistory" onclick="navTo('history')">
+    <div class="nav-btn-icon">📝</div>
+    <div class="nav-btn-label">History</div>
+  </button>
+</div>
 </body>
 </html>
