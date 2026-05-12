@@ -666,73 +666,79 @@ const MUSCLE_GROUPS = {
 
 let currentFocus = null; // 'Upper', 'Lower', or 'Full Body'
 
-// ===================== MAXIMUM HYPERTROPHY PROGRAM =====================
-const PROGRAM = {
-  name: 'Maximum Hypertrophy Plan',
-  schedule: {
-    'upper_a': {
-      label: 'Upper A', sub: 'Push Emphasis', day: 'Monday', color: '#3b82f6', icon: '🔵',
-      warmup: '5 min cardio + band pull-aparts 2×15 + arm circles',
-      exercises: [
-        { name: 'Incline DB Press', category: 'Chest', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: '30-45° incline. Full ROM. DBs to outer chest.' },
-        { name: 'Flat DB Press', category: 'Chest', sets: 3, reps: '10-12', tempo: '3-0-1', rest: 120, cue: 'Slight arch. Full stretch at bottom.' },
-        { name: 'Seated OH Press (DB)', category: 'Shoulders', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Seated for back support. Full lockout at top.' },
-        { name: 'Cable Lateral Raise', category: 'Shoulders', sets: 3, reps: '12-15', tempo: '2-1-1', rest: 90, cue: 'Constant tension. Pinky slightly up. Slow lowering.' },
-        { name: 'Seated Cable Row (Wide)', category: 'Back', sets: 3, reps: '10-12', tempo: '2-1-2', rest: 120, cue: 'Wide grip. Squeeze scapulae. Balances pressing.' },
-        { name: 'OH Tricep Extension (Cable)', category: 'Triceps', sets: 3, reps: '12-15', tempo: '2-1-1', rest: 90, cue: 'Full stretch at bottom. Long head = mass head.' }
-      ]
-    },
-    'lower_a': {
-      label: 'Lower A', sub: 'Quad Emphasis', day: 'Tuesday', color: '#dc2626', icon: '🔴',
-      warmup: 'Copenhagen plank 2×15s/side + Glute bridge march 2×6/side',
-      exercises: [
-        { name: 'Leg Press', category: 'Quads', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Feet shoulder-width, mid-platform. Full depth 90°+.' },
-        { name: 'Bulgarian Split Squat', category: 'Quads', sets: 3, reps: '8-10/leg', tempo: '3-1-1', rest: 120, cue: 'Bench-sit to find stance. Lean forward — hip hinge. Heel drives.' },
-        { name: 'Leg Extension', category: 'Quads', sets: 3, reps: '12-15', tempo: '2-2-1', rest: 90, cue: 'Pause at top. Slow eccentric. Full ROM.' },
-        { name: 'Leg Curl', category: 'Hamstrings', sets: 3, reps: '10-12', tempo: '2-1-2', rest: 90, cue: 'Squeeze at contraction. Slow return.' },
-        { name: 'Single-Leg Calf Raise', category: 'Calves', sets: 3, reps: '10-12/side', tempo: '2-1-3', rest: 60, cue: 'Full ROM. Heel below step, full extension top. No bounce.' },
-        { name: 'Hanging Knee Raise', category: 'Core', sets: 3, reps: '10-15', tempo: 'ctrl', rest: 60, cue: 'Slow, controlled. No swinging. Core bracing.' }
-      ]
-    },
-    'upper_b': {
-      label: 'Upper B', sub: 'Pull Emphasis', day: 'Thursday', color: '#8b5cf6', icon: '🟣',
-      warmup: '5 min cardio + face pulls 2×15 + scapular wall slides',
-      exercises: [
-        { name: 'Lat Pulldown (Wide)', category: 'Back', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Slight lean back. Pull to upper chest. Squeeze bottom.' },
-        { name: 'Chest-Supported Row', category: 'Back', sets: 4, reps: '10-12', tempo: '2-1-2', rest: 120, cue: 'Chest on pad = no low back fatigue. Retract scapulae hard.' },
-        { name: 'Flat DB Press', category: 'Chest', sets: 3, reps: '10-12', tempo: '2-0-1', rest: 120, cue: 'Lighter than Monday. Volume for growth, not strength.' },
-        { name: 'Face Pulls (Cable Rope)', category: 'Shoulders', sets: 3, reps: '15-20', tempo: '1-2-1', rest: 60, cue: 'High reps. 2s squeeze hold. Shoulder health at 65.' },
-        { name: 'Incline DB Curl', category: 'Biceps', sets: 3, reps: '10-12', tempo: '3-0-1', rest: 90, cue: '45° incline. Full stretch at bottom. Slow eccentric.' },
-        { name: 'Cable Pushdown (Rope)', category: 'Triceps', sets: 3, reps: '12-15', tempo: '2-1-1', rest: 90, cue: 'Split rope at bottom. 2nd tricep frequency hit.' }
-      ]
-    },
-    'lower_b': {
-      label: 'Lower B', sub: 'Posterior Chain', day: 'Friday', color: '#f59e0b', icon: '🟡',
-      warmup: 'Copenhagen plank 2×15s/side + Glute bridge march 2×8/side (3s hold)',
-      exercises: [
-        { name: 'Romanian Deadlift', category: 'Hamstrings', sets: 4, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Hinge at hips. Bar/DBs trace legs. Feel hamstring stretch. Don\'t round.' },
-        { name: 'Step-Up + Knee Drive', category: 'Glutes', sets: 3, reps: '8-10/leg', tempo: '1-1-3', rest: 120, cue: 'Hover bottom foot. No push-off. Drive through heel. 3s lowering.' },
-        { name: 'Leg Curl', category: 'Hamstrings', sets: 4, reps: '10-12', tempo: '2-1-2', rest: 90, cue: 'Higher volume today — hams are the priority.' },
-        { name: 'Hip Thrust', category: 'Glutes', sets: 3, reps: '10-12', tempo: '2-2-1', rest: 120, cue: 'Full lockout. 2s squeeze at top. Bench at mid-scapula.' },
-        { name: 'Single-Leg Calf Raise', category: 'Calves', sets: 3, reps: '10-12/side', tempo: '2-1-3', rest: 60, cue: 'On step edge. Full ROM. Slow eccentric.' },
-        { name: 'Tibialis Wall Raise', category: 'Core', sets: 3, reps: '15', tempo: '1-1-2', rest: 60, cue: 'Back to wall, heels 6" out. Toes to shins. Balances calf work.' }
-      ]
-    },
-    'full_body': {
-      label: 'Full Body', sub: 'Compounds Only', day: 'Flexible', color: '#22c55e', icon: '🟢',
-      warmup: '5 min cardio + band pull-aparts 2×15 + bodyweight squats 2×10',
-      exercises: [
-        { name: 'Incline DB Press', category: 'Chest', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: '30-45° incline. Full ROM. DBs to outer chest.' },
-        { name: 'Lat Pulldown (Wide)', category: 'Back', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Slight lean back. Pull to upper chest. Squeeze bottom.' },
-        { name: 'Seated OH Press (DB)', category: 'Shoulders', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 120, cue: 'Seated for back support. Full lockout at top.' },
-        { name: 'Leg Press', category: 'Quads', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Feet shoulder-width, mid-platform. Full depth 90°+.' },
-        { name: 'Romanian Deadlift', category: 'Hamstrings', sets: 3, reps: '8-10', tempo: '3-1-1', rest: 150, cue: 'Hinge at hips. Bar/DBs trace legs. Feel hamstring stretch. Don\'t round.' },
-        { name: 'Face Pulls (Cable Rope)', category: 'Shoulders', sets: 2, reps: '15-20', tempo: '1-2-1', rest: 60, cue: 'High reps. 2s squeeze hold. Shoulder health at 65.' },
-        { name: 'Hanging Knee Raise', category: 'Core', sets: 2, reps: '10-15', tempo: 'ctrl', rest: 60, cue: 'Slow, controlled. No swinging. Core bracing.' }
-      ]
-    }
-  }
+// ===================== MAXIMUM HYPERTROPHY PROGRAM (Dynamic) =====================
+// Initialized from portal via get_assigned_programs Edge Function.
+// Fallback hardcoded program for offline / no-assignment case.
+let PROGRAM = {
+  name: 'Loading Program...',
+  schedule: {}
 };
+
+async function loadDynamicProgram(){
+  if(!window.IRON_TOKEN) return; // No token = no program assignment
+  try {
+    const data = await pwaSync('get_assigned_programs');
+    if(!data || !data.program) return;
+
+    const templateData = data.program;
+    const schedule = {};
+
+    // Transform program_days array → schedule object keyed by day_key
+    if(templateData.program_days && Array.isArray(templateData.program_days)){
+      templateData.program_days.forEach(dayData => {
+        const key = dayData.day_key;
+        if(!key) return;
+
+        // Transform exercises: extract from nested program_day_exercises
+        const exercises = [];
+        if(dayData.program_day_exercises && Array.isArray(dayData.program_day_exercises)){
+          dayData.program_day_exercises.forEach(pde => {
+            const ex = pde.exercises || {};
+            exercises.push({
+              name: ex.name || 'Exercise',
+              category: ex.category || ex.muscle_group || 'General',
+              sets: pde.prescribed_sets || 3,
+              reps: pde.prescribed_reps || '8-10',
+              tempo: pde.prescribed_tempo || ex.default_tempo || '2-1-1',
+              rest: pde.prescribed_rest_sec || ex.default_rest_sec || 90,
+              cue: pde.coaching_cue || ex.coaching_cue || ''
+            });
+          });
+        }
+
+        // Assign color + icon based on day_key
+        const colorMap = {
+          'upper_a': { color: '#3b82f6', icon: '🔵' },
+          'lower_a': { color: '#dc2626', icon: '🔴' },
+          'upper_b': { color: '#8b5cf6', icon: '🟣' },
+          'lower_b': { color: '#f59e0b', icon: '🟡' },
+          'full_body': { color: '#22c55e', icon: '🟢' }
+        };
+        const colorData = colorMap[key] || { color: '#999', icon: '⚪' };
+
+        schedule[key] = {
+          label: dayData.label || 'Day',
+          sub: dayData.sub_label || '',
+          day: dayData.suggested_day || '',
+          color: colorData.color,
+          icon: colorData.icon,
+          warmup: 'Dynamic warmup',  // Edge Function doesn't store warmup yet
+          exercises: exercises
+        };
+      });
+    }
+
+    // Update global PROGRAM with loaded data
+    PROGRAM = {
+      name: templateData.name || 'Training Program',
+      schedule: schedule
+    };
+    console.log('[Iron] Program loaded:', PROGRAM.name, 'days:', Object.keys(PROGRAM.schedule).length);
+  } catch(e){
+    console.warn('[Iron] loadDynamicProgram failed', e);
+    // Fall back to hardcoded program (not ideal but allows offline use)
+  }
+}
 
 // Program workout state
 let programDay = null; // key from PROGRAM.schedule (e.g., 'upper_a')
@@ -3212,7 +3218,9 @@ window.addEventListener('load', () => {
 // ===================== SUPABASE CLIENT BADGE (v0.3) =====================
 // Init sync pill with current queue state on load, then flush any queued items.
 updateSyncPill();
-initClientSyncBadge().then(() => flushQueue());
+initClientSyncBadge()
+  .then(() => loadDynamicProgram())  // v0.4: load program from portal
+  .then(() => flushQueue());
 </script>
 
 <!-- Bottom Navigation Bar — accessible on all screen sizes -->
