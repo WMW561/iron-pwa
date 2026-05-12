@@ -2442,10 +2442,7 @@ async function submitLabForm(){
   // Check if disclaimer has been accepted (first time only)
   const disclaimerAccepted = localStorage.getItem('iron_labs_disclaimer_accepted');
   if(!disclaimerAccepted){
-    const accept = await showDialog(
-      'Labs data will be visible to your trainer.\n\nThis data is self-reported and not reviewed by your trainer or any clinician.\n\nDo you consent to share this with your trainer?',
-      {okText:'Accept',cancelText:'Decline'}
-    );
+    const accept = confirm('Labs data will be visible to your trainer.\n\nThis data is self-reported and not reviewed by your trainer or any clinician.\n\nDo you consent to share this with your trainer?');
     if(!accept){ return; }
 
     // Call Edge Function to record acceptance server-side
