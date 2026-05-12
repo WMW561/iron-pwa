@@ -2439,7 +2439,42 @@ async function submitLabForm(){
   if(!marker){ await showDialog('Enter a biomarker name.',{alert:true,okText:'OK'}); return; }
   if(isNaN(value)){ await showDialog('Enter a numeric value.',{alert:true,okText:'OK'}); return; }
 
+  // Check if disclaimer has been accepted (first time only)
+  const disclaimerAccepted = localStorage.getItem('iron_labs_disclaimer_accepted');
+  if(!disclaimerAccepted){
+    const accept = await showDialog(
+      'Labs data will be visible to your trainer.\n\nThis data is self-reported and not reviewed by your trainer or any clinician.\n\nDo you consent to share this with your trainer?',
+      {okText:'Accept',cancelText:'Decline'}
+    );
+    if(!accept){ return; }
+
+    // Call Edge Function to record acceptance server-side
+    if(window.IRON_TOKEN){
+      try {
+        await pwaSync('accept_labs_disclaimer', {});
+        localStorage.setItem('iron_labs_disclaimer_accepted', 'true');
+      } catch(e){
+        console.warn('[Iron] accept_labs_disclaimer failed', e);
+        // Continue anyway — local flag is set
+        localStorage.setItem('iron_labs_disclaimer_accepted', 'true');
+      }
+    }
+  }
+
   addLab({date, marker, value, unit, notes});
+
+  // Sync to server if online
+  if(window.IRON_TOKEN){
+    enqueueSync('log_lab', {
+      marker,
+      value,
+      unit,
+      logged_at: new Date(date).toISOString(),
+      client_log_id: 'lab_' + Date.now()
+    });
+    flushQueue();
+  }
+
   renderDashCards();
 }
 
